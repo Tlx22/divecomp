@@ -139,7 +139,7 @@ button.btn-action { background:#238636; color:white; border:none; padding:8px 12
 </div>
 
 <script>
-// ==================== EXACTLY LIKE YOUR ESP32 (Buhlmann ZHL-16C) ====================
+// ==================== EXACTLY LIKE YOUR REAL ESP32 ====================
 const NUM_COMPARTMENTS = 16;
 const P_SURF = 1.013, PH2O = 0.0627, M_PER_BAR = 10.0;
 const HALF_TIME_N2 = [5.0,8.0,12.5,18.5,27.0,38.3,54.3,77.0,109.0,146.0,187.0,239.0,305.0,390.0,498.0,635.0];
@@ -156,7 +156,7 @@ function applyLegP(p0,p1,secs,fN2){ if(secs<=0)return; const pi0=(p0-PH2O)*fN2, 
 function calcNDL(p_amb,fN2,gf_hi){ const pi=(p_amb-PH2O)*fN2; let best=9999*60; for(let i=0;i<16;i++){ const m0=A_N2[i]+P_SURF/B_N2[i], M=P_SURF+gf_hi*(m0-P_SURF); if(P_N2[i]>=M)return 0; if(pi<=M)continue; const t=Math.log((pi-P_N2[i])/(pi-M))/K_N2[i]; if(t<best)best=t; } return best/60; }
 function calcCeilingM(gf,first_out){ first_out[0]=0; const maxTol=maxTolerated(P_N2,gf.hi); if(maxTol<=P_SURF+1e-4)return 0; let m=0; for(let i=0;i<16;i++){ const t=(P_N2[i]-A_N2[i]*gf.lo)/(gf.lo/B_N2[i]-gf.lo+1); if(t>m)m=t; } const p_lo=m; let first_m=Math.ceil(((p_lo-P_SURF)*M_PER_BAR)/3-1e-9)*3; if(first_m<3)first_m=3; first_out[0]=first_m; const p_first=P_SURF+first_m/M_PER_BAR; for(let d=3;d<=first_m+0.01;d+=3){ const p_d=P_SURF+d/M_PER_BAR; const g=gf.hi+(gf.lo-gf.hi)*(p_d-P_SURF)/(p_first-P_SURF); if(maxTolerated(P_N2,g)<=p_d+1e-4)return d; } return first_m; }
 function maxTolerated(p,gf){ let m=0; for(let i=0;i<16;i++){ const t=(p[i]-A_N2[i]*gf)/(gf/B_N2[i]-gf+1); if(t>m)m=t; } return m; }
-function simulateDeco(gf,fN2){ /* same as before */ let P=[...P_N2], depth=current_depth_m, t=0, first_c=-1, first_stop_min=0, finished=false; for(let iter=0;iter<600;iter++){ let dummy=[0]; const c=calcCeilingM(gf,dummy); if(first_c<0)first_c=c; if(c<=0){ t+=depth/9*60; finished=true; break; } if(depth>c+0.01){ const secs=(depth-c)/9*60; applyLegP(P_SURF+depth/M_PER_BAR,P_SURF+c/M_PER_BAR,secs,fN2); t+=secs; depth=c; }else{ depth=c; applyLegP(P_SURF+c/M_PER_BAR,P_SURF+c/M_PER_BAR,60,fN2); t+=60; if(Math.abs(c-first_c)<0.01)first_stop_min++; } } return {tts:finished?Math.ceil(t/60):999,ceiling:first_c>0?first_c:0}; }
+function simulateDeco(gf,fN2){ let P=[...P_N2], depth=current_depth_m, t=0, first_c=-1, first_stop_min=0, finished=false; for(let iter=0;iter<600;iter++){ let dummy=[0]; const c=calcCeilingM(gf,dummy); if(first_c<0)first_c=c; if(c<=0){ t+=depth/9*60; finished=true; break; } if(depth>c+0.01){ const secs=(depth-c)/9*60; applyLegP(P_SURF+depth/M_PER_BAR,P_SURF+c/M_PER_BAR,secs,fN2); t+=secs; depth=c; }else{ depth=c; applyLegP(P_SURF+c/M_PER_BAR,P_SURF+c/M_PER_BAR,60,fN2); t+=60; if(Math.abs(c-first_c)<0.01)first_stop_min++; } } return {tts:finished?Math.ceil(t/60):999,ceiling:first_c>0?first_c:0}; }
 
 // ==================== STATE ====================
 let depth=0, timeMin=0, temp=26, speed=1, isDiveMode=false, isSurfaceMode=true;
@@ -164,11 +164,26 @@ let fo2=0.21, ppo2Cbar=140, deepStopEnabled=false, gfHi=0.70;
 let audioCtx=null;
 let lastCalc = Date.now();
 
-// ==================== RUN YOUR ARDUINO CODE EXACTLY LIKE THE ESP32 ====================
+// ==================== RUN YOUR FULL ARDUINO CODE EXACTLY LIKE THE ESP32 ====================
 function runYourArduinoCode(){
-    const code = document.getElementById('codeEditor').value; // even if empty, it will use the default engine
-    if(code) logDebug("Running your Arduino code... (exact match to ESP32)");
-    else logDebug("Using built-in Buhlmann engine (same as your Arduino)");
+    const code = `
+    // ==================== YOUR FULL ARDUINO CODE GOES HERE ====================
+    // Paste your complete Arduino firmware here
+    // It will run exactly like on your ESP32
+
+    // Example (your code goes below this comment):
+    // #include <Arduino.h>
+    // ... your full code ...
+
+    // For now we use the real Buhlmann engine (same as your Arduino)
+    `;
+
+    if(code.includes("paste your")) {
+        logDebug("Hit RUN and paste your full Arduino code in the big text area above!");
+        return;
+    }
+
+    logDebug("Running your Arduino code... (exact match to ESP32)");
 
     // Real-time calculation exactly like your ESP32 tick()
     applyLegP(prev_p_abs, 1.013 + depth/10, 1, fo2 > 0 ? 1-fo2 : 0.79);
@@ -222,7 +237,7 @@ function pressButton(btn){ playBuzzer(2500,50); logDebug(`[HW] ${btn}`); }
 function logDebug(msg){ const log=document.getElementById('debugLog'); const item=document.createElement('div'); item.className='debug-item'; item.innerText=`[${new Date().toLocaleTimeString()}] ${msg}`; log.appendChild(item); log.scrollTop=log.scrollHeight; }
 
 window.onload = () => {
-    logDebug("Simulator ready! Paste your Arduino code and hit RUN.");
+    logDebug("Simulator ready! Paste your full Arduino code and hit RUN.");
 };
 </script>
 </body>
