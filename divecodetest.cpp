@@ -107,6 +107,7 @@ float  gauge_f = 0.0f;
 float  current_depth_m = 0.0f;
 float  max_depth_m = 0.0f;
 float  ascent_rate_m_min = 0.0f;
+float  descent_rate_m_min = 0.0f;
 double p_abs_bar = P_SURF;
 double prev_p_abs = P_SURF;
 double current_ppo2 = 0.21;
@@ -480,6 +481,20 @@ void updateAscentRate(uint32_t now) {
   }
 }
 
+void updateDescentRate(uint32_t now) {
+  static float hist[6];
+  static uint8_t idx = 0, cnt = 0;
+  static uint32_t last = 0;
+  if (now - last >= 1000) {
+    last = now;
+    idx = (idx + 1) % 6;
+    hist[idx] = current_depth_m;
+    if (cnt < 6) cnt++;
+    if (cnt >= 6) descent_rate_m_min = (current_depth_m - hist[(idx + 1) % 6]) * 12.0f;  // 5 s window
+    else descent_rate_m_min = 0.0f;
+  }
+}
+
 // ---------------------------------------------------------------------
 // DIVE START / END
 // ---------------------------------------------------------------------
@@ -691,16 +706,38 @@ void renderUI(uint32_t now) {
     u8g2.drawStr(0, 10, "SURFACE / PLANNER");
     u8g2.drawHLine(0, 12, 128);
 
-    snprintf(buf, sizeof(buf), "NO FLY: %luh%02lum", (unsigned long)(no_fly_sec / 3600), (unsigned long)((no_fly_sec % 3600) / 60));
-    u8g2.drawStr(0, 24, buf);
-    snprintf(buf, sizeof(buf), "O2:%d%% PPO2:%.2f", fo2_pct, ppo2_cbar / 100.0);
-    u8g2.drawStr(0, 34, buf);
-    snprintf(buf, sizeof(buf), "MOD:%.1fm Dives:%u", mod_m, (unsigned)dive_count);
-    u8g2.drawStr(0, 44, buf);
-    if (algoLocked()) snprintf(buf, sizeof(buf), "ALG:%s LK%luh", ALGO_NAMES[selectedAlgo], (unsigned long)((algo_lock_sec + 3599) / 3600));
-    else snprintf(buf, sizeof(buf), "ALG:%s", ALGO_NAMES[selectedAlgo]);
-    u8g2.drawStr(0, 54, buf);
-    if (sensor_fault) u8g2.drawStr(0, 63, "SENSOR FAULT");
+    // === NEW: DIVE LOG MODE ===
+    if (menu_cursor == 4) {
+      u8g2.setFont(u8g2_font_6x10_tr);
+      u8g2.drawStr(0, 24, "DIVE LOG (last 100)");
+      u8g2.drawHLine(0, 26, 128);
+      prefs.begin("dive_logs", true);
+      uint32_t total = prefs.getUInt("count", 0);
+      uint32_t start = (total > MAX_LOGS) ? total - MAX_LOGS : 0;
+      for (uint32_t i = start; i < total; i++) {
+        char key[16];
+        snprintf(key, sizeof(key), "log_%u", (unsigned)(i % MAX_LOGS));
+        String data = prefs.getString(key, "");
+        if (data.length() > 0) {
+          Serial.println(data); // still prints to Serial for debugging
+          u8g2.setFont(u8g2_font_5x7_tr);
+          u8g2.drawStr(0, (i - start + 6) * 9, data.c_str());
+        }
+      }
+      prefs.end();
+    } else {
+      // === ORIGINAL SURFACE MENU ===
+      snprintf(buf, sizeof(buf), "NO FLY: %luh%02lum", (unsigned long)(no_fly_sec / 3600), (unsigned long)((no_fly_sec % 3600) / 60));
+      u8g2.drawStr(0, 24, buf);
+      snprintf(buf, sizeof(buf), "O2:%d%% PPO2:%.2f", fo2_pct, ppo2_cbar / 100.0);
+      u8g2.drawStr(0, 34, buf);
+      snprintf(buf, sizeof(buf), "MOD:%.1fm Dives:%u", mod_m, (unsigned)dive_count);
+      u8g2.drawStr(0, 44, buf);
+      if (algoLocked()) snprintf(buf, sizeof(buf), "ALG:%s LK%luh", ALGO_NAMES[selectedAlgo], (unsigned long)((algo_lock_sec + 3599) / 3600));
+      else snprintf(buf, sizeof(buf), "ALG:%s", ALGO_NAMES[selectedAlgo]);
+      u8g2.drawStr(0, 54, buf);
+      if (sensor_fault) u8g2.drawStr(0, 63, "SENSOR FAULT");
+    }
   }
   else if (currentMode == MODE_MENU) {
     u8g2.setFont(u8g2_font_6x10_tr);
@@ -732,9 +769,20 @@ void renderUI(uint32_t now) {
       }
       u8g2.drawHLine(0, 12, 128);
 
+      // === NEW: ASCENT / DESCENT SYMBOLS + DEPTH ===
+      u8g2.setFont(u8g2_font_6x10_tr);
+      if (ascent_rate_m_min > 0.0f) {
+        snprintf(buf, sizeof(buf), "ASCN:%.1f m/min", ascent_rate_m_min);
+      } else if (descent_rate_m_min > 0.0f) {
+        snprintf(buf, sizeof(buf), "DESC:%.1f m/min", descent_rate_m_min);
+      } else {
+        snprintf(buf, sizeof(buf), "STAT: --.- m/min");
+      }
+      u8g2.drawStr(0, 20, buf);
+
       u8g2.setFont(u8g2_font_5x7_tr);
-      u8g2.drawStr(0, 20, "DEPTH m");
-      u8g2.drawStr(80, 20, in_deco ? "CEIL m" : "NDL min");
+      u8g2.drawStr(0, 33, "DEPTH m");
+      u8g2.drawStr(80, 33, in_deco ? "CEIL m" : "NDL min");
 
       u8g2.setFont(u8g2_font_logisoso22_tn);
       snprintf(buf, sizeof(buf), "%.1f", current_depth_m);
@@ -835,6 +883,8 @@ void tick(uint32_t now, double dt) {
     prev_p_abs = p_abs_bar;
 
     updateAscentRate(now);
+    updateDescentRate(now);
+
     if (currentMode == MODE_DIVE) {
       if (current_depth_m > max_depth_m) max_depth_m = current_depth_m;
       dive_duration_sec = (now - dive_start_time) / 1000;
