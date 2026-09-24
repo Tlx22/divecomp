@@ -170,7 +170,7 @@
 
     .code-editor {
       width: 100%;
-      height: 220px;
+      height: 240px;
       background: #0d1117;
       color: #79c0ff;
       border: 1px solid var(--border-color);
@@ -181,7 +181,7 @@
     }
 
     .debug-log {
-      height: 200px;
+      height: 220px;
       background: #000;
       color: #3fb950;
       padding: 10px;
@@ -206,7 +206,7 @@
         <div id="oledScreen" class="oled-screen">
           <div class="oled-header">
             <span id="screenMode">SURFACE</span>
-            <span id="screenAlgo">ZHL16C</span>
+            <span id="screenAlgo">Buhlmann</span>
           </div>
           <div class="oled-main">
             <div>
@@ -232,7 +232,7 @@
           </div>
         </div>
 
-        <!-- 2. Physical Pushbuttons -->
+        <!-- Physical Pushbuttons -->
         <div class="hardware-buttons">
           <button class="btn-hw" onclick="pressButton('SELECT')">SEL</button>
           <button class="btn-hw" onclick="pressButton('UP')">▲</button>
@@ -240,7 +240,7 @@
         </div>
       </div>
 
-      <!-- 4. Audio Buzzer Test -->
+      <!-- Audio Buzzer Test -->
       <div style="margin-top: 15px;">
         <label>🔊 Audio Alert Test (Buzzer)</label>
         <button class="btn-action" style="background:#d29922; width:100%;" onclick="playBuzzer(1000, 200)">Trigger Alert Tone</button>
@@ -249,9 +249,9 @@
 
     <!-- COLUMN 2: Environmental Controls & Time Simulation -->
     <div class="card">
-      <h3>3. Environment & Speed Controls</h3>
+      <h3>Environment & Speed Controls</h3>
       
-      <!-- 5. Time Playback Controls -->
+      <!-- Time Playback Controls -->
       <div class="control-group" style="background: #21262d; padding: 10px; border-radius: 6px;">
         <label>Playback Time Speed Multiplier:</label>
         <div style="display: flex; gap: 10px;">
@@ -277,38 +277,101 @@
         <button class="btn-action" id="btnSurface" onclick="toggleSurface()">Force Dive / Surface Switch</button>
       </div>
 
-      <!-- 7. Plug & Play Code Insertion -->
-      <h3>7. Firmware Plug & Play Scripting</h3>
-      <textarea id="codeEditor" class="code-editor">// Write or adjust live calculation hooks here
-// Called every second by the simulator engine
-function executeAlgorithmTick(depthMeters, elapsedTimeSec) {
-    // Example Buhlmann simplified tissue compartment pressure calculation
-    let ambientP = 1.0 + (depthMeters / 10.0);
-    let pN2 = ambientP * 0.79;
+      <!-- Scripting Code Area -->
+      <h3>Firmware Algorithm Engine Hook</h3>
+      <textarea id="codeEditor" class="code-editor">// Bühlmann ZHL-16C execution logic run per tick
+function executeAlgorithmTick(depthMeters, elapsedTimeSec, dt) {
+    const pAmb = 1.013 + (depthMeters / 10.0);
+    const fN2 = 0.79; // Air default (21% O2)
     
-    // NDL calculation approximation for preview
-    let ndl = 99;
-    if (depthMeters > 10) {
-        ndl = Math.max(1, Math.floor(2000 / Math.pow(depthMeters, 1.4)));
-    }
+    // Update tissue compartment saturation via Schreiner / Haldane equation
+    updateTissues(pAmb, fN2, dt);
     
-    let isAlarm = (depthMeters > 40) || (ndl < 3);
-    return { pN2: pN2, ndl: ndl, alarm: isAlarm };
+    // Compute exact NDL or Deco obligation
+    const gfHi = 0.70;
+    const gfLo = 0.30;
+    const ndl = Math.floor(calcNDL(pAmb, fN2, gfHi));
+    const ceiling = calcCeiling(gfLo, gfHi);
+    
+    const inDeco = ceiling > 0;
+    const isAlarm = (depthMeters > 40) || (inDeco && depthMeters < ceiling);
+    
+    return {
+        pN2: P_N2[0],
+        ndl: inDeco ? 0 : ndl,
+        ceiling: ceiling,
+        inDeco: inDeco,
+        alarm: isAlarm
+    };
 }
       </textarea>
     </div>
 
-    <!-- COLUMN 3: Debugger & Real-time Computations -->
+    <!-- COLUMN 3: Debugger & Computations -->
     <div class="card">
-      <h3>6. Algorithm Computations Debugger</h3>
+      <h3>Algorithm Computations Debugger</h3>
       <div id="debugLog" class="debug-log">
-        <div class="debug-item">System booted. Waiting for simulation loop...</div>
+        <div class="debug-item">System booted. Bühlmann ZHL-16C engine initialized...</div>
       </div>
     </div>
 
   </div>
 
   <script>
+    // --- Bühlmann ZHL-16C Engine Constants ---
+    const NUM_COMPARTMENTS = 16;
+    const P_SURF = 1.013;
+    const PH2O = 0.0627;
+    const HALF_TIME_N2 = [5.0, 8.0, 12.5, 18.5, 27.0, 38.3, 54.3, 77.0, 109.0, 146.0, 187.0, 239.0, 305.0, 390.0, 498.0, 635.0];
+    const A_N2 = [1.1696, 1.0000, 0.8618, 0.7562, 0.6200, 0.5043, 0.4410, 0.4000, 0.3750, 0.3500, 0.3295, 0.3065, 0.2835, 0.2610, 0.2480, 0.2327];
+    const B_N2 = [0.5578, 0.6514, 0.7222, 0.7825, 0.8126, 0.8434, 0.8693, 0.8910, 0.9092, 0.9222, 0.9319, 0.9403, 0.9477, 0.9544, 0.9602, 0.9653];
+
+    let K_N2 = new Array(16);
+    let P_N2 = new Array(16);
+    let P_AIR = new Array(16);
+
+    // Initialize tissue math tables
+    function initBuhlmann() {
+      for (let i = 0; i < NUM_COMPARTMENTS; i++) {
+        K_N2[i] = Math.log(2.0) / (HALF_TIME_N2[i] * 60.0);
+        P_AIR[i] = (P_SURF - PH2O) * 0.7902;
+        P_N2[i] = P_AIR[i];
+      }
+    }
+    initBuhlmann();
+
+    function updateTissues(pAmb, fN2, secs) {
+      const pN2Insp = (pAmb - PH2O) * fN2;
+      for (let i = 0; i < NUM_COMPARTMENTS; i++) {
+        P_N2[i] = pN2Insp + (P_N2[i] - pN2Insp) * Math.exp(-K_N2[i] * secs);
+      }
+    }
+
+    function calcNDL(pAmb, fN2, gfHi) {
+      const pN2Insp = (pAmb - PH2O) * fN2;
+      let minNDL = 9999 * 60;
+      for (let i = 0; i < NUM_COMPARTMENTS; i++) {
+        const m0 = A_N2[i] + P_SURF / B_N2[i];
+        const M = P_SURF + gfHi * (m0 - P_SURF);
+        if (P_N2[i] >= M) return 0;
+        if (pN2Insp <= M) continue;
+        const t = Math.log((pN2Insp - P_N2[i]) / (pN2Insp - M)) / K_N2[i];
+        if (t < minNDL) minNDL = t;
+      }
+      return minNDL / 60.0;
+    }
+
+    function calcCeiling(gfLo, gfHi) {
+      let maxP = 0;
+      for (let i = 0; i < NUM_COMPARTMENTS; i++) {
+        let pTol = (P_N2[i] - A_N2[i] * gfLo) / (gfLo / B_N2[i] - gfLo + 1.0);
+        if (pTol > maxP) maxP = pTol;
+      }
+      if (maxP <= P_SURF) return 0;
+      let ceilM = (maxP - P_SURF) * 10.0;
+      return Math.ceil(ceilM / 3.0) * 3.0; // 3m stop intervals
+    }
+
     // --- State Variables ---
     let depth = 0.0;
     let temperature = 26.0;
@@ -316,9 +379,10 @@ function executeAlgorithmTick(depthMeters, elapsedTimeSec) {
     let speed = 1;
     let isDiveMode = false;
     let audioCtx = null;
-    let simInterval = null;
+    let currentAlgoIdx = 0;
+    const algoNames = ["Buhlmann", "RGBM-sim", "PADI-tbl"];
 
-    // --- Audio Buzzer Implementation (WebAudio API) ---
+    // --- Audio Buzzer Implementation ---
     function playBuzzer(freq = 2000, durationMs = 150) {
       if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -328,7 +392,7 @@ function executeAlgorithmTick(depthMeters, elapsedTimeSec) {
       }
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-      osc.type = 'square'; // PWM pulse tone like ESP32 passive buzzer
+      osc.type = 'square';
       osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
       gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
       osc.connect(gain);
@@ -342,8 +406,8 @@ function executeAlgorithmTick(depthMeters, elapsedTimeSec) {
       playBuzzer(2500, 50);
       logDebug(`[HW BTN] Pressed: ${btnName}`);
       if(btnName === 'SELECT') {
-        let algo = document.getElementById('screenAlgo');
-        algo.innerText = algo.innerText === 'ZHL16C' ? 'GF 30/70' : 'ZHL16C';
+        currentAlgoIdx = (currentAlgoIdx + 1) % algoNames.length;
+        document.getElementById('screenAlgo').innerText = algoNames[currentAlgoIdx];
       }
     }
 
@@ -351,7 +415,6 @@ function executeAlgorithmTick(depthMeters, elapsedTimeSec) {
       depth = parseFloat(val);
       document.getElementById('valDepth').innerText = depth.toFixed(1);
       
-      // Auto switch mode based on depth (>0.8m is diving)
       if (depth > 0.8 && !isDiveMode) {
         isDiveMode = true;
         document.getElementById('screenMode').innerText = "DIVE";
@@ -383,13 +446,13 @@ function executeAlgorithmTick(depthMeters, elapsedTimeSec) {
     function resetDive() {
       elapsedTime = 0;
       depth = 0;
+      initBuhlmann();
       document.getElementById('sliderDepth').value = 0;
       updateDepth(0);
       document.getElementById('debugLog').innerHTML = '';
-      logDebug("Dive computer reset to power-on default state.");
+      logDebug("Dive computer reset & tissue compartments re-initialized.");
     }
 
-    // --- Execution Log / Debugger ---
     function logDebug(msg) {
       const log = document.getElementById('debugLog');
       const item = document.createElement('div');
@@ -399,13 +462,13 @@ function executeAlgorithmTick(depthMeters, elapsedTimeSec) {
       log.scrollTop = log.scrollHeight;
     }
 
-    // --- Main Simulator Engine Loop ---
+    // --- Main Simulator Loop ---
     function tick() {
+      const stepSec = 1 * speed;
       if (isDiveMode) {
-        elapsedTime += 1 * speed;
+        elapsedTime += stepSec;
       }
 
-      // UI updates
       document.getElementById('dispDepth').innerText = depth.toFixed(1);
       document.getElementById('dispTemp').innerText = temperature.toFixed(1);
       
@@ -413,16 +476,24 @@ function executeAlgorithmTick(depthMeters, elapsedTimeSec) {
       let secs = (elapsedTime % 60).toString().padStart(2, '0');
       document.getElementById('dispTime').innerText = `${mins}:${secs}`;
 
-      // Run plug-and-play code dynamically
       try {
         const userCode = document.getElementById('codeEditor').value;
-        // Dynamically execute code logic from editor
-        const evalFunc = new Function(`${userCode}; return executeAlgorithmTick(${depth}, ${elapsedTime});`);
+        const evalFunc = new Function(`
+          ${userCode}; 
+          return executeAlgorithmTick(${depth}, ${elapsedTime}, ${stepSec});
+        `);
         const result = evalFunc();
 
-        document.getElementById('dispNDL').innerText = result.ndl;
+        // Update displays based on engine computations
+        document.getElementById('dispNDL').innerText = result.ndl > 99 ? '99+' : result.ndl;
+        
+        const stopElem = document.getElementById('dispStop');
+        if (result.inDeco) {
+          stopElem.innerText = `STOP ${result.ceiling}m`;
+        } else {
+          stopElem.innerText = "NO DECO";
+        }
 
-        // Alarm handling
         const screen = document.getElementById('oledScreen');
         if (result.alarm) {
           screen.classList.add('alarm');
@@ -432,7 +503,7 @@ function executeAlgorithmTick(depthMeters, elapsedTimeSec) {
         }
 
         if (elapsedTime % 5 === 0 && isDiveMode) {
-          logDebug(`CALC: P_amb=${(1 + depth/10).toFixed(2)}bar | P_N2=${result.pN2.toFixed(3)}bar | NDL=${result.ndl}m`);
+          logDebug(`CALC: P_amb=${(1.013 + depth/10).toFixed(2)}bar | FastTissue_N2=${result.pN2.toFixed(3)}bar | NDL=${result.ndl}m`);
         }
 
       } catch (err) {
@@ -440,7 +511,6 @@ function executeAlgorithmTick(depthMeters, elapsedTimeSec) {
       }
     }
 
-    // Run simulator tick every 1000ms
     setInterval(tick, 1000);
   </script>
 </body>
