@@ -1,244 +1,181 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dive Computer Simulator — Exactly Like ESP32</title>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dive Computer Simulator</title>
 <style>
-/* Same beautiful style as your screenshot */
-:root {
-    --bg-color: #0d1117;
-    --card-bg: #161b22;
-    --border-color: #30363d;
-    --accent-color: #58a6ff;
-    --text-color: #c9d1d9;
-    --oled-bg: #000000;
-    --oled-blue: #00d2ff;
-    --oled-yellow: #ffcc00;
-    --oled-alert: #ff4444;
-}
-body { margin:0; padding:20px; background:var(--bg-color); color:var(--text-color); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,monospace; display:flex; flex-direction:column; gap:20px; }
-h1,h2,h3 { margin:0 0 10px 0; color:#fff; }
-.grid-container { display:grid; grid-template-columns:320px 1fr 340px; gap:20px; }
-.card { background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:15px; }
-.device-housing { background:#21262d; border:3px solid #484f58; border-radius:20px; padding:20px; display:flex; flex-direction:column; align-items:center; box-shadow:0 10px 25px rgba(0,0,0,0.5); }
-.oled-screen { width:256px; height:128px; background:var(--oled-bg); border:2px solid #30363d; border-radius:4px; padding:8px; box-sizing:border-box; font-family:'Courier New',Courier,monospace; color:var(--oled-blue); display:flex; flex-direction:column; justify-content:space-between; user-select:none; position:relative; }
-.oled-screen.alarm { border-color:var(--oled-alert); animation:flash 0.5s infinite alternate; }
-@keyframes flash { from { box-shadow:0 0 5px var(--oled-alert); } to { box-shadow:0 0 20px var(--oled-alert); } }
-.oled-header { display:flex; justify-content:space-between; font-size:12px; color:var(--oled-yellow); border-bottom:1px solid #333; padding-bottom:2px; }
-.oled-main { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin:5px 0; }
-.oled-value { font-size:20px; font-weight:bold; }
-.oled-label { font-size:10px; color:#888; }
-.oled-footer { font-size:11px; color:var(--oled-yellow); border-top:1px solid #333; padding-top:2px; display:flex; justify-content:space-between; }
-.hardware-buttons { display:flex; justify-content:space-between; width:100%; margin-top:20px; }
-.btn-hw { background:#30363d; color:white; border:2px solid #6e7681; border-radius:50%; width:50px; height:50px; font-weight:bold; cursor:pointer; transition:active 0.1s; }
-.btn-hw:active { background:var(--accent-color); transform:scale(0.95); }
-.control-group { display:flex; flex-direction:column; gap:10px; margin-bottom:15px; }
-label { font-size:12px; font-weight:bold; }
-input[type=range] { width:100%; }
-button.btn-action { background:#238636; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; font-weight:bold; }
-.code-editor { width:100%; height:240px; background:#0d1117; color:#79c0ff; border:1px solid var(--border-color); border-radius:6px; padding:10px; box-sizing:border-box; resize:vertical; font-family:'Fira Code',monospace; }
-.debug-log { height:220px; background:#000; color:#3fb950; padding:10px; border-radius:6px; overflow-y:auto; border:1px solid var(--border-color); }
-.debug-item { margin-bottom:4px; border-bottom:1px dotted #222; }
-</style>
-</head>
-<body>
-
-<h1>🤿 Dive Computer Simulator — Exactly Like ESP32</h1>
-
-<div class="grid-container">
-
-    <!-- COLUMN 1 -->
-    <div class="card">
-        <h3>Hardware Frame</h3>
-        <div class="device-housing">
-            <div id="oledScreen" class="oled-screen">
-                <div class="oled-header">
-                    <span id="screenMode">SURFACE</span>
-                    <span id="screenAlgo">Buhlmann</span>
-                </div>
-                <div class="oled-main">
-                    <div><div class="oled-label">DEPTH (m)</div><div id="dispDepth" class="oled-value">0.0</div></div>
-                    <div><div class="oled-label">NDL (min)</div><div id="dispNDL" class="oled-value">99</div></div>
-                    <div><div class="oled-label">DIVE TIME</div><div id="dispTime" class="oled-value">00:00</div></div>
-                    <div><div class="oled-label">TEMP (°C)</div><div id="dispTemp" class="oled-value">26.0</div></div>
-                </div>
-                <div class="oled-footer">
-                    <span id="dispStop">NO DECO</span>
-                    <span id="dispTTS">TTS: 0m</span>
-                </div>
-            </div>
-
-            <div class="hardware-buttons">
-                <button class="btn-hw" onclick="pressButton('SELECT')">SEL</button>
-                <button class="btn-hw" onclick="pressButton('UP')">▲</button>
-                <button class="btn-hw" onclick="pressButton('DOWN')">▼</button>
-            </div>
-        </div>
-
-        <div style="margin-top:15px;">
-            <label>🔊 Audio Alert Test (Buzzer)</label>
-            <button class="btn-action" style="background:#d29922;width:100%;" onclick="playBuzzer(1000,200)">Trigger Alert Tone</button>
-        </div>
-    </div>
-
-    <!-- COLUMN 2 -->
-    <div class="card">
-        <h3>Environment & Speed Controls</h3>
-
-        <div class="control-group" style="background:#21262d;padding:10px;border-radius:6px;">
-            <label>Playback Speed</label>
-            <div style="display:flex;gap:8px;">
-                <button class="btn-action" onclick="setSpeed(1)">1x</button>
-                <button class="btn-action" onclick="setSpeed(2)">2x</button>
-                <button class="btn-action" onclick="setSpeed(4)">4x</button>
-                <button class="btn-action" onclick="setSpeed(60)" style="background:#f85149;">60x</button>
-                <button class="btn-action" style="background:#f85149;" onclick="resetDive()">Reset Dive</button>
-            </div>
-        </div>
-
-        <div class="control-group">
-            <label>Depth: <span id="valDepth">0.0</span> m</label>
-            <input type="range" id="sliderDepth" min="0" max="60" step="0.5" value="0" oninput="updateDepth(this.value)">
-        </div>
-
-        <div class="control-group">
-            <label>Time Elapsed: <span id="valTime">0</span> min</label>
-            <input type="range" id="sliderTime" min="0" max="120" step="1" value="0" oninput="updateTime(this.value)">
-        </div>
-
-        <div class="control-group">
-            <label>Water Temp: <span id="valTemp">26</span> °C</label>
-            <input type="range" id="sliderTemp" min="4" max="35" step="1" value="26" oninput="updateTemp(this.value)">
-        </div>
-
-        <div class="control-group">
-            <label>Fo2 %</label>
-            <input type="range" id="sliderFo2" min="21" max="40" step="1" value="21" oninput="updateFo2(this.value)">
-            <span id="valFo2">21</span>%
-        </div>
-
-        <div class="control-group">
-            <label>Gradient Factor (GF)</label>
-            <input type="range" id="sliderGF" min="30" max="70" step="1" value="70" oninput="updateGF(this.value)">
-            <span id="valGF">0.70</span>
-        </div>
-    </div>
-
-    <!-- COLUMN 3 -->
-    <div class="card">
-        <h3>Real Arduino Engine (Runs Exactly Like ESP32)</h3>
-        <button class="btn-action" onclick="runYourArduinoCode()">▶ RUN YOUR ARDUINO CODE</button>
-        <button class="btn-action" style="background:#f85149;" onclick="resetDive()">Reset Dive</button>
-
-        <h3 style="margin-top:20px;">Debug Log</h3>
-        <div id="debugLog" class="debug-log">
-            <div class="debug-item">System booted. Bühlmann ZHL-16C engine initialized...</div>
-        </div>
-    </div>
-</div>
-
+:root{--bg:#f4f5f7;--fg:#15181d;--card:#fff;--bd:#d5d9e0;--ac:#0b6bcb;--mu:#5b6573;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1216;--fg:#e6e9ee;--card:#171b21;--bd:#2a3039;--ac:#5aa9ff;--mu:#98a2b0}}
+:root[data-theme="dark"]{--bg:#0f1216;--fg:#e6e9ee;--card:#171b21;--bd:#2a3039;--ac:#5aa9ff;--mu:#98a2b0}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,sans-serif}
+main{max-width:1100px;margin:auto;padding:12px;display:grid;gap:12px;grid-template-columns:minmax(0,540px) minmax(0,1fr)}
+@media(max-width:820px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px}
+h1{font-size:17px;margin:0 0 2px}h2{font-size:13px;margin:0 0 6px;color:var(--mu);text-transform:uppercase;letter-spacing:.05em}
+canvas#oled{width:100%;max-width:512px;aspect-ratio:2/1;background:#000;border-radius:6px;image-rendering:pixelated;display:block}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
+button{background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer}
+button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.hw{flex:1;padding:14px 4px;font-weight:600}
+label{display:grid;grid-template-columns:110px 1fr 64px;gap:6px;align-items:center;margin:5px 0}
+label span:last-child{text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%}
+.bd{display:inline-block;padding:2px 8px;border-radius:99px;background:var(--bd);color:var(--mu);font-size:12px;margin:2px}
+.bd.w{background:#d92d20;color:#fff}.bd.i{background:#f79009;color:#000}
+#buz{width:12px;height:12px;border-radius:50%;background:var(--bd);display:inline-block}#buz.on{background:#f79009}
+pre,textarea{width:100%;box-sizing:border-box;background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:6px;font:12px ui-monospace,monospace}
+pre{margin:0;padding:6px;max-height:180px;overflow:auto;white-space:pre-wrap}textarea{height:220px}
+.wide{grid-column:1/-1}#dv{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:2px 10px;font:12px ui-monospace,monospace}
+#dv b{color:var(--mu);font-weight:400}.ov{overflow-x:auto}#err{color:#d92d20;font-size:12px}
+</style></head><body>
+<main>
+<section class="card"><h1>Dive Computer Simulator</h1>
+<canvas id="oled" width="512" height="256"></canvas>
+<div class="row"><button class="hw" id="b0">UP / NEXT <small>[1]</small></button><button class="hw" id="b1">SELECT <small>[2]</small></button><button class="hw" id="b2">MODE / MENU <small>[3]</small></button></div>
+<div class="row"><span id="buz"></span><span id="clk"></span></div>
+<div id="badges"></div><h2 style="margin-top:8px">Alert log</h2><pre id="alog" style="max-height:110px"></pre>
+</section>
+<section class="card"><h2>Environment</h2>
+<label>Target depth<input id="dep" type="range" min="0" max="60" step="0.1" value="0"><span id="depv"></span></label>
+<label>Move rate<input id="rate" type="range" min="1" max="60" step="1" value="15"><span id="ratev"></span></label>
+<label>Water temp<input id="tmp" type="range" min="2" max="32" step="0.5" value="26"><span id="tmpv"></span></label>
+<label>Heading<input id="hdg" type="range" min="0" max="359" value="0"><span id="hdgv"></span></label>
+<div class="row"><label style="display:flex;gap:6px"><input type="checkbox" id="surf"> On surface (lock depth 0)</label></div>
+<div class="row" id="live"></div>
+<h2>Time</h2>
+<div class="row"><button id="s0">Pause</button><button id="s1" class="on">1x</button><button id="s2">2x</button><button id="s3">3x</button></div>
+<label>Skip ahead<input id="skm" type="range" min="1" max="720" value="30"><span id="skv"></span></label>
+<div class="row"><button id="skip">Skip ahead at current depth</button></div>
+<h2>Sensor / sound</h2>
+<label>Noise (mV)<input id="noi" type="range" min="0" max="20" value="1"><span id="noiv"></span></label>
+<div class="row"><label style="display:flex;gap:6px"><input type="checkbox" id="flt"> Sensor fault</label><label style="display:flex;gap:6px"><input type="checkbox" id="snd" checked> Buzzer audio</label><label style="display:flex;gap:6px"><input type="checkbox" id="dbg"> Debug</label></div>
+<div class="row"><button id="pc">Power cycle (keep flash)</button><button id="fr">Factory reset</button></div>
+</section>
+<section class="card wide" id="dbgp" hidden><h2>Debug: firmware variables</h2><div id="dv"></div>
+<h2 style="margin-top:8px">Tissues (bar = N2 tension 0-4 bar; white = ambient, orange = surface M-value at GF hi)</h2><div class="ov"><canvas id="tis" width="620" height="200" style="width:620px"></canvas></div>
+<h2 style="margin-top:8px">HAL / Serial</h2><pre id="hal"></pre></section>
+<section class="card wide"><h2>Firmware (JavaScript, same structure as the C++)</h2>
+<textarea id="src" spellcheck="false"></textarea>
+<div class="row"><button id="ld">Load firmware</button><button id="rs">Restore default</button><span id="err"></span></div>
+<small style="color:var(--mu)">Firmware = <code>function FW(HAL){...; return {setup, loop, vars}}</code>. HAL: millis, analogMv, edge, heading, temp, u8g2, Serial, prefs, beep.</small></section>
+</main>
 <script>
-// ==================== EXACTLY LIKE YOUR REAL ESP32 ====================
-const NUM_COMPARTMENTS = 16;
-const P_SURF = 1.013, PH2O = 0.0627, M_PER_BAR = 10.0;
-const HALF_TIME_N2 = [5.0,8.0,12.5,18.5,27.0,38.3,54.3,77.0,109.0,146.0,187.0,239.0,305.0,390.0,498.0,635.0];
-const A_N2 = [1.1696,1.0000,0.8618,0.7562,0.6200,0.5043,0.4410,0.4000,0.3750,0.3500,0.3295,0.3065,0.2835,0.2610,0.2480,0.2327];
-const B_N2 = [0.5578,0.6514,0.7222,0.7825,0.8126,0.8434,0.8693,0.8910,0.9092,0.9222,0.9319,0.9403,0.9477,0.9544,0.9602,0.9653];
+const $=id=>document.getElementById(id);
+/* ================= FIRMWARE (JS port of main.cpp) ================= */
+function FW(HAL){
+const {analogMv,u8g2,Serial,prefs,beep}=HAL;
+const P_SURF=1.013,PH2O=0.0627,FN2_AIR=0.7902,MPB=10,ASC=9;
+const HT=[5,8,12.5,18.5,27,38.3,54.3,77,109,146,187,239,305,390,498,635];
+const A=[1.1696,1,0.8618,0.7562,0.62,0.5043,0.441,0.4,0.375,0.35,0.3295,0.3065,0.2835,0.261,0.248,0.2327];
+const B=[0.5578,0.6514,0.7222,0.7825,0.8126,0.8434,0.8693,0.891,0.9092,0.9222,0.9319,0.9403,0.9477,0.9544,0.9602,0.9653];
+const K=HT.map(h=>Math.LN2/(h*60)),PAIR=(P_SURF-PH2O)*FN2_AIR;let P=HT.map(()=>PAIR);
+const TD=[10,12,14,16,18,20,22,25,30,35,40,42],TN=[219,147,98,72,56,45,37,29,20,14,9,8];let tadj=TN.slice();
+const ALG=["Buhlmann","RGBM-sim","PADI-tbl"];
+const S={mode:'SURFACE',view:0,algo:0,fo2:21,ppo2:140,deep:false,dirty:false,zero:250,zeroValid:false,gauge:0,depth:0,maxD:0,rate:0,pabs:P_SURF,prev:P_SURF,ppo2n:.21,mod:0,fault:false,bad:0,dstart:0,dur:0,dcount:0,viol:0,nofly:0,lock:0,ndl:99,deco:false,ceil:0,tts:0,nstop:0,nmin:0,texc:false,dDeco:false,dViol:false,breach:0,gf0:.3,gf1:.7,ss:false,ssDone:false,ssEl:0,ds:false,dsDone:false,dsEl:0,dsD:0,cur:0,desc:0,surf:0,sync:0,wc:false,wa:false,wp:false,hdg:0,card:'N'};
+let lastSim=0,lastS=0,saveAcc=0,lastR=0;const hist=[],pw={};
+const pAt=d=>P_SURF+d/MPB;
+function leg(Q,p0,p1,s,f){if(s<=0)return;const a=(p0-PH2O)*f,b=(p1-PH2O)*f,R=(b-a)/s;for(let i=0;i<16;i++){const k=K[i],e=Math.exp(-k*s);Q[i]=a+R*(s-1/k)-(a-Q[i]-R/k)*e}}
+const maxTol=(Q,g)=>Math.max(0,...Q.map((p,i)=>(p-A[i]*g)/(g/B[i]-g+1)));
+function gfNow(){if(S.algo==1)return[.3,Math.max(.45,.75-.05*Math.min(S.dcount,3)-.05*Math.min(S.viol,3))];return[.3,.7]}
+function ndlCalc(Q,pa,f,gh){const pi=(pa-PH2O)*f;let best=9999*60;for(let i=0;i<16;i++){const M=P_SURF+gh*(A[i]+P_SURF/B[i]-P_SURF);if(Q[i]>=M)return 0;if(pi<=M)continue;best=Math.min(best,Math.log((pi-Q[i])/(pi-M))/K[i])}return best/60}
+function ceilCalc(Q,g){if(maxTol(Q,g[1])<=P_SURF+1e-4)return 0;const pl=maxTol(Q,g[0]),fm=Math.max(3,Math.ceil((pl-P_SURF)*MPB/3-1e-9)*3),pf=pAt(fm);for(let d=3;d<=fm+.01;d+=3){const pd=pAt(d),gg=g[1]+(g[0]-g[1])*(pd-P_SURF)/(pf-P_SURF);if(maxTol(Q,gg)<=pd+1e-4)return d}return fm}
+function simDeco(g,f){const Q=P.slice();let d=S.depth,t=0,fc=-1,fmn=0,fin=false;for(let it=0;it<600;it++){const c=ceilCalc(Q,g);if(fc<0)fc=c;if(c<=0){t+=d/ASC*60;fin=true;break}if(d>c+.01){const s=(d-c)/ASC*60;leg(Q,pAt(d),pAt(c),s,f);t+=s;d=c}else{d=c;leg(Q,pAt(c),pAt(c),60,f);t+=60;if(Math.abs(c-fc)<.01)fmn++}}S.tts=fin?Math.ceil(t/60):999;S.nstop=Math.max(fc,0);S.nmin=Math.max(1,fmn)}
+const tIdx=d=>TD.findIndex(x=>d<=x);
+function buildTbl(){const f=1-S.fo2/100,PA=HT.map(()=>PAIR);for(let j=0;j<12;j++){const pa=pAt(TD[j]),fr=ndlCalc(PA,pa,f,.7),nw=ndlCalc(P,pa,f,.7),r=fr<.5?1:Math.min(1,nw/fr);tadj[j]=Math.floor(TN[j]*Math.max(0,r))}}
+function saveState(){prefs.put('st',{P:P.slice(),nofly:S.nofly,lock:S.lock,dc:S.dcount,viol:S.viol,zero:S.zero})}
+function loadState(){const s=prefs.get('st',null);if(!s||!s.P||s.P.length!=16||s.P.some(x=>!(x>.3&&x<8)))return false;P=s.P.slice();S.nofly=s.nofly;S.lock=s.lock;S.dcount=s.dc;S.viol=s.viol;if(s.zero>50&&s.zero<2450){S.zero=s.zero;S.zeroValid=true}return true}
+function saveSet(){prefs.put('set',{fo2:S.fo2,ppo2:S.ppo2,deep:S.deep,algo:S.algo});S.dirty=false}
+function sensors(){let mv=0;for(let i=0;i<10;i++)mv+=analogMv(0);mv/=10;
+ if(mv<50||mv>2450){if(S.bad<255)S.bad++;if(S.bad>=10)S.fault=true}else{S.bad=0;S.fault=false;let g=(mv-S.zero)/1000/2*12;if(S.mode!='DIVE'&&Math.abs(g)<.03)S.zero+=.002*(mv-S.zero);if(g<0)g=0;S.gauge+=.3*(g-S.gauge);S.depth=S.gauge*MPB;S.pabs=P_SURF+S.gauge}
+ const h=HAL.heading();S.hdg=Math.round(h)%360;S.card=["N","NE","E","SE","S","SW","W","NW"][Math.floor((h+22.5)/45)%8]}
+function rate(now){if(now-lastR>=1000){lastR=now;hist.push(S.depth);if(hist.length>6)hist.shift();S.rate=hist.length==6?(hist[0]-S.depth)*12:0}}
+function startDive(t){if(S.dirty)saveSet();S.mode='DIVE';S.view=0;S.dstart=t;S.dur=0;S.maxD=S.depth;S.surf=0;S.ss=S.ssDone=S.ds=S.dsDone=false;S.ssEl=S.dsEl=0;S.dDeco=S.dViol=false;S.breach=0;S.deco=false;S.ceil=0;S.texc=false;S.lock=86400;if(S.algo==2)buildTbl();saveState();beep('DIVE START',880,150)}
+function endDive(){S.dur=Math.floor((S.surf-S.dstart)/1000);S.dcount++;if(S.dViol)S.viol=Math.min(255,S.viol+1);const tg=(S.dDeco||S.dViol)?86400:(S.dcount>1?64800:43200);S.nofly=Math.max(S.nofly,tg);S.lock=86400;const l=prefs.get('logs',[]);l.push([S.dur,+S.maxD.toFixed(1),S.fo2,S.algo,S.dDeco?1:0]);prefs.put('logs',l.slice(-100));saveState();S.mode='SURFACE';S.surf=0;beep('DIVE END',660,300)}
+function upd(dt,now){
+ if(S.mode!='DIVE'){S.ndl=99;S.deco=false;S.ceil=0;S.tts=0;S.texc=false;S.wc=S.wa=S.wp=false;return}
+ const g=gfNow();S.gf0=g[0];S.gf1=g[1];const f=1-S.fo2/100;S.texc=false;
+ if(S.algo==2){const ix=tIdx(S.maxD),el=Math.ceil(S.dur/60);if(ix<0||el>=tadj[ix]){S.texc=true;S.dViol=true}else{S.ndl=Math.min(99,tadj[ix]-el);S.deco=false;S.ceil=0;S.tts=Math.ceil(S.depth/ASC)}}
+ if(S.algo!=2||S.texc){S.ceil=ceilCalc(P,g);S.deco=S.ceil>0;if(S.deco){S.ndl=0;S.dDeco=true;if(!lastSim||now-lastSim>=2000){simDeco(g,f);lastSim=now||1}}else{S.ndl=Math.min(99,Math.floor(ndlCalc(P,S.pabs,f,g[1])));S.tts=Math.ceil(S.depth/ASC)}}
+ S.wc=S.deco&&S.depth<S.ceil-.5;if(S.wc){S.breach+=dt;if(S.breach>10)S.dViol=true}else S.breach=0;
+ S.wa=S.rate>9;if(S.rate>12)S.dViol=true;S.wp=S.ppo2n>=S.ppo2/100}
+function stops(dt){if(S.deco){S.ss=S.ds=false;return}
+ if(S.deep&&S.maxD>=18&&!S.dsDone){S.dsD=S.maxD/2;S.ds=S.depth<S.maxD-3&&Math.abs(S.depth-S.dsD)<=1.5;if(S.ds){S.dsEl+=dt;if(S.dsEl>=120){S.dsDone=true;S.ds=false;beep('DEEP STOP DONE',1000,200)}}}
+ if(S.maxD>=10&&!S.ssDone){if(S.depth>=3&&S.depth<=6)S.ss=true;else if(S.depth<2.5||S.depth>7){S.ss=false;S.ssEl=0}if(S.ss){S.ssEl+=dt;if(S.ssEl>=180){S.ssDone=true;S.ss=false;beep('SAFETY STOP DONE',1000,200)}}}}
+function buttons(){
+ if(HAL.edge(2)){if(S.mode=='SURFACE')S.mode='MENU';else if(S.mode=='MENU'){if(S.dirty)saveSet();S.mode='SURFACE'}else if(S.mode=='DIVE')S.view=(S.view+1)%3}
+ if(HAL.edge(0)&&S.mode=='MENU')S.cur=(S.cur+1)%5;
+ if(HAL.edge(1)&&S.mode=='MENU'){switch(S.cur){case 0:S.fo2=S.fo2>=40?21:S.fo2+1;S.dirty=true;break;case 1:S.ppo2=S.ppo2>=160?100:S.ppo2+5;S.dirty=true;break;case 2:S.deep=!S.deep;S.dirty=true;break;case 3:if(!S.lock){S.algo=(S.algo+1)%3;S.dirty=true}break;case 4:S.mode='SYNC';S.sync=HAL.millis()+3000;Serial.println('LOGS '+JSON.stringify(prefs.get('logs',[])))}}}
+function edge(k,v,n,f,ms){if(v&&!pw[k])beep(n,f,ms);pw[k]=v}
+function alerts(){edge('wc',S.wc,'CEILING BREACH',1500,500);edge('wa',S.wa,'ASCENT TOO FAST',1200,400);edge('wp',S.wp,'HIGH PPO2',1800,500);edge('te',S.texc,'TABLE EXCEEDED',1400,500);edge('sf',S.fault,'SENSOR FAULT',400,600);edge('ss',S.ss,'SAFETY STOP',700,150);edge('ds',S.ds,'DEEP STOP',700,150)}
+const T=(f,x,y,s)=>{u8g2.setFont(f);u8g2.drawStr(x,y,s)},mmss=s=>String(Math.floor(s/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0');
+function render(now){u8g2.clearBuffer();const F='6x10',fo=S.fo2,pp=(S.ppo2/100).toFixed(2),lk=Math.ceil(S.lock/3600);
+ if(S.mode=='SURFACE'){T(F,0,10,'SURFACE / PLANNER');u8g2.drawHLine(0,12,128);T(F,0,24,`NO FLY: ${Math.floor(S.nofly/3600)}h${String(Math.floor(S.nofly%3600/60)).padStart(2,'0')}m`);T(F,0,34,`O2:${fo}% PPO2:${pp}`);T(F,0,44,`MOD:${S.mod.toFixed(1)}m Dives:${S.dcount}`);T(F,0,54,'ALG:'+ALG[S.algo]+(S.lock?` LK${lk}h`:''));if(S.fault)T(F,0,63,'SENSOR FAULT')}
+ else if(S.mode=='MENU'){const c=i=>S.cur==i?'>':' ';T(F,0,10,'SETTINGS MENU');u8g2.drawHLine(0,12,128);T(F,0,22,`${c(0)}1 FO2 Nitrox: ${fo}%`);T(F,0,32,`${c(1)}2 PPO2 Lim: ${pp}`);T(F,0,42,`${c(2)}3 Deep Stop: ${S.deep?'ON':'OFF'}`);T(F,0,52,S.lock?`${c(3)}4 ${ALG[S.algo]} LK ${lk}h`:`${c(3)}4 Algo: ${ALG[S.algo]}`);T(F,0,62,`${c(4)}5 PC Debugger Sync`)}
+ else if(S.mode=='SYNC'){T('6x12',10,25,'PC DEBUGGER');T('6x12',10,45,'SYNCING LOGS...')}
+ else if(S.view==0){const W=[];if(S.fault)W.push('SENSOR FAULT');if(S.wc)W.push('CEILING BREACH!');if(S.wp)W.push('HIGH PPO2!');if(S.wa)W.push('ASCENT TOO FAST!');if(S.texc)W.push('TABLE LIMIT EXCEEDED');
+  if(W.length)T('6x12',0,11,W[Math.floor(now/1500)%W.length]);else T(F,0,10,`${String(S.hdg).padStart(3,'0')}* ${S.card} | O2:${fo}%`);
+  u8g2.drawHLine(0,12,128);T('5x7',0,20,'DEPTH m');T('5x7',80,20,S.deco?'CEIL m':'NDL min');T('L22',0,44,S.depth.toFixed(1));
+  if(S.deco)T('L22',80,44,S.ceil.toFixed(0));else if(S.ndl>=99){T('L22',80,44,'99');T(F,112,44,'+')}else T('L22',80,44,''+S.ndl);
+  u8g2.drawHLine(0,47,128);
+  if(S.deco)T(F,0,60,`STOP ${S.nstop.toFixed(0)}m ${S.nmin}min TTS${S.tts}`);
+  else if(S.ss)T(F,0,60,`STOP 5m | ${mmss(Math.max(0,180-S.ssEl))}`);
+  else if(S.ds)T(F,0,60,`DEEP ${S.dsD.toFixed(0)}m | ${mmss(Math.max(0,120-S.dsEl))}`);
+  else{T(F,0,60,`M:${S.maxD.toFixed(1)}m`);T(F,50,60,mmss(S.dur));T(F,96,60,S.ppo2n.toFixed(2))}}
+ else if(S.view==1){T('7x14',20,14,'- NAV & TEMP -');u8g2.drawHLine(0,16,128);T('7x14',0,32,`HEADING: ${S.hdg}*`);T('7x14',0,46,`DIR: ${S.card}`);T('7x14',0,60,`TEMP: ${HAL.temp().toFixed(1)} C`)}
+ else{T(F,0,10,`GAS O2:${fo}% PPO2:${S.ppo2n.toFixed(2)}`);T(F,0,22,`MOD:${S.mod.toFixed(1)}m LIM:${pp}`);T(F,0,34,S.algo==2&&!S.texc?'ALG:'+ALG[2]:`ALG:${ALG[S.algo]} GF${Math.round(S.gf0*100)}/${Math.round(S.gf1*100)}`);T(F,0,46,S.deco?`CEIL:${S.ceil}m TTS:${S.tts}min`:`NO DECO  NDL:${S.ndl}`);T(F,0,58,`ASC:${S.rate.toFixed(1)}m/min`)}
+ u8g2.sendBuffer()}
+function tick(now,dt){sensors();const fo=S.fo2/100;S.ppo2n=S.pabs*fo;S.mod=Math.max(0,Math.floor((S.ppo2/100/fo-P_SURF)*MPB*10)/10);
+ if(!S.fault){leg(P,S.prev,S.pabs,dt,S.mode=='DIVE'?1-fo:FN2_AIR);S.prev=S.pabs;rate(now);if(S.mode=='DIVE'){S.maxD=Math.max(S.maxD,S.depth);S.dur=Math.floor((now-S.dstart)/1000)}upd(dt,now);if(S.mode=='DIVE')stops(dt)}
+ if(S.mode!='DIVE'){if(!S.fault&&S.depth>=.8){if(!S.desc)S.desc=now;if(now-S.desc>=3000){startDive(S.desc);S.desc=0}}else S.desc=0}else{if(S.depth<.3){if(!S.surf)S.surf=now;if(now-S.surf>=60000)endDive()}else S.surf=0}
+ if(S.mode=='SYNC'&&now>=S.sync)S.mode='SURFACE';
+ if(now-lastS>=1000){lastS=now;saveAcc++;if(S.mode!='DIVE'){if(S.nofly>0)S.nofly--;if(S.lock>0)S.lock--;if(!S.nofly&&!S.lock&&(S.dcount||S.viol)){S.dcount=0;S.viol=0;saveState()}}if(saveAcc>=(S.mode=='DIVE'?120:300)){saveAcc=0;if(S.mode=='DIVE'||S.nofly>0)saveState()}}
+ alerts();render(now)}
+function setup(){const s=prefs.get('set',{});S.fo2=s.fo2||21;S.ppo2=s.ppo2||140;S.deep=!!s.deep;S.algo=s.algo||0;if(!loadState())P=P.map(()=>PAIR);
+ let mv=0;for(let i=0;i<30;i++)mv+=analogMv(0);mv/=30;if(mv<50||mv>2450)S.fault=true;else if(!(S.zeroValid&&Math.abs(mv-S.zero)>16.7)){S.zero=mv;S.zeroValid=true}S.prev=P_SURF}
+function loop(now,dt){buttons();tick(now,dt)}
+return{setup,loop,vars:()=>({...S,P:P.slice(),tadj}),A,B}}
 
-let K_N2 = new Array(16), P_N2 = new Array(16), P_AIR = new Array(16);
-let prev_p_abs = P_SURF;
-
-function initBuhlmann() { for(let i=0;i<16;i++){ K_N2[i]=Math.log(2)/(HALF_TIME_N2[i]*60); P_AIR[i]=(P_SURF-PH2O)*0.7902; P_N2[i]=P_AIR[i]; } }
-initBuhlmann();
-
-function applyLegP(p0,p1,secs,fN2){ if(secs<=0)return; const pi0=(p0-PH2O)*fN2, pi1=(p1-PH2O)*fN2, R=(pi1-pi0)/secs; for(let i=0;i<16;i++){ const k=K_N2[i], e=Math.exp(-k*secs); P_N2[i]=pi0 + R*(secs-1/k) - (pi0-P_N2[i]-R/k)*e; } }
-function calcNDL(p_amb,fN2,gf_hi){ const pi=(p_amb-PH2O)*fN2; let best=9999*60; for(let i=0;i<16;i++){ const m0=A_N2[i]+P_SURF/B_N2[i], M=P_SURF+gf_hi*(m0-P_SURF); if(P_N2[i]>=M)return 0; if(pi<=M)continue; const t=Math.log((pi-P_N2[i])/(pi-M))/K_N2[i]; if(t<best)best=t; } return best/60; }
-function calcCeilingM(gf,first_out){ first_out[0]=0; const maxTol=maxTolerated(P_N2,gf.hi); if(maxTol<=P_SURF+1e-4)return 0; let m=0; for(let i=0;i<16;i++){ const t=(P_N2[i]-A_N2[i]*gf.lo)/(gf.lo/B_N2[i]-gf.lo+1); if(t>m)m=t; } const p_lo=m; let first_m=Math.ceil(((p_lo-P_SURF)*M_PER_BAR)/3-1e-9)*3; if(first_m<3)first_m=3; first_out[0]=first_m; const p_first=P_SURF+first_m/M_PER_BAR; for(let d=3;d<=first_m+0.01;d+=3){ const p_d=P_SURF+d/M_PER_BAR; const g=gf.hi+(gf.lo-gf.hi)*(p_d-P_SURF)/(p_first-P_SURF); if(maxTolerated(P_N2,g)<=p_d+1e-4)return d; } return first_m; }
-function maxTolerated(p,gf){ let m=0; for(let i=0;i<16;i++){ const t=(p[i]-A_N2[i]*gf)/(gf/B_N2[i]-gf+1); if(t>m)m=t; } return m; }
-function simulateDeco(gf,fN2){ let P=[...P_N2], depth=current_depth_m, t=0, first_c=-1, first_stop_min=0, finished=false; for(let iter=0;iter<600;iter++){ let dummy=[0]; const c=calcCeilingM(gf,dummy); if(first_c<0)first_c=c; if(c<=0){ t+=depth/9*60; finished=true; break; } if(depth>c+0.01){ const secs=(depth-c)/9*60; applyLegP(P_SURF+depth/M_PER_BAR,P_SURF+c/M_PER_BAR,secs,fN2); t+=secs; depth=c; }else{ depth=c; applyLegP(P_SURF+c/M_PER_BAR,P_SURF+c/M_PER_BAR,60,fN2); t+=60; if(Math.abs(c-first_c)<0.01)first_stop_min++; } } return {tts:finished?Math.ceil(t/60):999,ceiling:first_c>0?first_c:0}; }
-
-// ==================== STATE ====================
-let depth=0, timeMin=0, temp=26, speed=1, isDiveMode=false, isSurfaceMode=true;
-let fo2=0.21, ppo2Cbar=140, deepStopEnabled=false, gfHi=0.70;
-let audioCtx=null;
-let lastCalc = Date.now();
-
-// ==================== RUN YOUR FULL ARDUINO CODE EXACTLY LIKE THE ESP32 ====================
-function runYourArduinoCode(){
-    const code = `
-    // ==================== YOUR FULL ARDUINO CODE GOES HERE ====================
-    // Paste your complete Arduino firmware here
-    // It will run exactly like on your ESP32
-
-    // Example (your code goes below this comment):
-    // #include <Arduino.h>
-    // ... your full code ...
-
-    // For now we use the real Buhlmann engine (same as your Arduino)
-    `;
-
-    if(code.includes("paste your")) {
-        logDebug("Hit RUN and paste your full Arduino code in the big text area above!");
-        return;
-    }
-
-    logDebug("Running your Arduino code... (exact match to ESP32)");
-
-    // Real-time calculation exactly like your ESP32 tick()
-    applyLegP(prev_p_abs, 1.013 + depth/10, 1, fo2 > 0 ? 1-fo2 : 0.79);
-    prev_p_abs = 1.013 + depth/10;
-
-    const gf = {lo:0.30, hi:gfHi};
-    const ndl = calcNDL(1.013 + depth/10, fo2 > 0 ? 1-fo2 : 0.79, gf.hi);
-    const ceilingObj = [0];
-    const ceiling = calcCeilingM(gf, ceilingObj);
-
-    const inDeco = ceiling > 0;
-    const alarm = (depth>40) || (inDeco && depth < ceilingObj[0]);
-
-    // Clean time (exactly like your real ESP32)
-    const minutes = Math.floor(timeMin);
-    const seconds = Math.floor((timeMin % 1) * 100);
-    document.getElementById('dispTime').innerText = `${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}`;
-
-    document.getElementById('dispDepth').innerText = depth.toFixed(1);
-    document.getElementById('dispNDL').innerText = ndl>99 ? '99+' : Math.floor(ndl);
-    document.getElementById('dispTemp').innerText = temp.toFixed(1);
-
-    const stop = document.getElementById('dispStop');
-    stop.innerText = inDeco ? `STOP ${ceilingObj[0].toFixed(0)}m` : "NO DECO";
-
-    document.getElementById('dispTTS').innerText = `TTS: ${Math.floor(ceilingObj[0]/9*60/60)}m`;
-
-    const screen = document.getElementById('oledScreen');
-    if(alarm){
-        screen.classList.add('alarm');
-        if(Date.now()%2000<100) playBuzzer(3000,80);
-    } else screen.classList.remove('alarm');
-
-    if(isDiveMode) {
-        if(timeMin<120) timeMin += speed;
-    }
-}
-setInterval(runYourArduinoCode,1000);
-
-// ==================== UI Controls ====================
-function updateDepth(v){ depth=parseFloat(v); document.getElementById('valDepth').innerText=depth.toFixed(1); }
-function updateTime(v){ timeMin=parseFloat(v); document.getElementById('valTime').innerText=Math.floor(timeMin); }
-function updateTemp(v){ temp=parseFloat(v); document.getElementById('valTemp').innerText=temp; }
-function updateFo2(v){ fo2=parseFloat(v)/100; document.getElementById('valFo2').innerText=v; }
-function updateGF(v){ gfHi=parseFloat(v)/100; document.getElementById('valGF').innerText=v/100; }
-function toggleSurface(){ isSurfaceMode=!isSurfaceMode; document.getElementById('screenMode').innerText=isSurfaceMode?"SURFACE":"DIVE"; }
-function setSpeed(s){ speed=s; }
-function resetDive(){ depth=0; timeMin=0; initBuhlmann(); prev_p_abs=P_SURF; document.getElementById('sliderDepth').value=0; document.getElementById('sliderTime').value=0; updateDepth(0); logDebug("Reset"); }
-function playBuzzer(freq=2000,duration=150){ /* buzzer */ }
-function pressButton(btn){ playBuzzer(2500,50); logDebug(`[HW] ${btn}`); }
-function logDebug(msg){ const log=document.getElementById('debugLog'); const item=document.createElement('div'); item.className='debug-item'; item.innerText=`[${new Date().toLocaleTimeString()}] ${msg}`; log.appendChild(item); log.scrollTop=log.scrollHeight; }
-
-window.onload = () => {
-    logDebug("Simulator ready! Paste your full Arduino code and hit RUN.");
-};
-</script>
-</body>
-</html>
+/* ================= SIMULATOR / HAL ================= */
+const cv=$('oled'),cx=cv.getContext('2d'),tc=$('tis').getContext('2d');
+const FS={'5x7':5,'6x10':6,'6x12':6,'7x14':7,'L22':13};let fw=6,skipR=false,quiet=false;
+const u8g2={clearBuffer(){if(skipR)return;cx.setTransform(1,0,0,1,0,0);cx.fillStyle='#000';cx.fillRect(0,0,512,256);cx.scale(4,4);cx.fillStyle='#7df9ff'},setFont(f){fw=FS[f]||6},drawStr(x,y,s){if(skipR)return;cx.font=(fw/.6).toFixed(1)+'px monospace';cx.fillText(s,x,y)},drawHLine(x,y,w){if(!skipR)cx.fillRect(x,y,w,1)},sendBuffer(){}};
+let FWi,simMs=0,depth=0,tgt=0,speed=1,flash=new Map(),pend=[0,0,0],ac,buzz=0,lastMv=0,ticks=0,alog=[],ser=[],ptr=0;
+const st={temp:26,hdg:0,noise:1,fault:false,rate:15,surf:false,sound:true};
+const fmt=ms=>{const s=Math.floor(ms/1000),h=Math.floor(s/3600);return (h?h+':':'')+String(Math.floor(s%3600/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
+function tone(f,ms){try{ac=ac||new AudioContext();const o=ac.createOscillator(),g=ac.createGain();o.type='square';o.frequency.value=f;g.gain.value=.04;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+ms/1000)}catch(e){}}
+const HAL={millis:()=>simMs,
+ analogMv:()=>{lastMv=st.fault?0:250+depth/10/12*2000+(Math.random()-.5)*st.noise;return lastMv},
+ edge:i=>{const v=pend[i];pend[i]=0;return v},heading:()=>st.hdg,temp:()=>st.temp,u8g2,
+ Serial:{println:s=>{if(!quiet){ser.push(fmt(simMs)+' '+s);ser=ser.slice(-40)}}},
+ prefs:{get:(k,d)=>flash.has(k)?JSON.parse(flash.get(k)):d,put:(k,v)=>flash.set(k,JSON.stringify(v))},
+ beep:(n,f,ms)=>{if(quiet)return;alog.unshift(fmt(simMs)+'  '+n);alog=alog.slice(0,30);buzz=performance.now()+ms;if(st.sound)tone(f,ms)}};
+const DEF=FW.toString();
+function boot(src){try{FWi=(src?new Function('return ('+src+')')():FW)(HAL);FWi.setup();$('err').textContent=''}catch(e){$('err').textContent='Load failed: '+e+(e instanceof EvalError?' (eval blocked by page CSP)':'');FWi=FW(HAL);FWi.setup()}}
+function step(){const m=st.rate/600,t=st.surf?0:tgt;depth+=Math.max(-m,Math.min(m,t-depth));simMs+=100;ticks++;FWi.loop(simMs,.1)}
+function power(clear){if(clear){flash.clear();depth=0;tgt=0;$('dep').value=0;simMs=0;alog=[];ser=[]}boot($('src').value===DEF?null:$('src').value);ui()}
+$('src').value=DEF;
+const bind=(id,k,fn)=>{const e=$(id),o=()=>{const v=e.type=='checkbox'?e.checked:+e.value;fn(v);ui()};e.oninput=o;o()};
+bind('dep','',v=>{tgt=v;$('depv').textContent=v.toFixed(1)+' m'});bind('rate','',v=>{st.rate=v;$('ratev').textContent=v+' m/min'});
+bind('tmp','',v=>{st.temp=v;$('tmpv').textContent=v+' C'});bind('hdg','',v=>{st.hdg=v;$('hdgv').textContent=v+'\u00b0'});
+bind('surf','',v=>st.surf=v);bind('noi','',v=>{st.noise=v;$('noiv').textContent=v});bind('flt','',v=>st.fault=v);bind('snd','',v=>st.sound=v);
+bind('skm','',v=>$('skv').textContent=v+' min');$('dbg').onchange=()=>{$('dbgp').hidden=!$('dbg').checked};
+[0,1,2].forEach(i=>{$('b'+i).onclick=()=>{pend[i]=1}});
+addEventListener('keydown',e=>{const i='123'.indexOf(e.key);if(i>=0&&!/INPUT|TEXTAREA/.test(e.target.tagName))pend[i]=1});
+[0,1,2,3].forEach(s=>$('s'+s).onclick=()=>{speed=s;[0,1,2,3].forEach(k=>$('s'+k).className=k==s?'on':'')});
+$('skip').onclick=()=>{const n=+$('skm').value*600;quiet=skipR=true;for(let i=0;i<n;i++)step();quiet=skipR=false;step();ui()};
+$('pc').onclick=()=>power(false);$('fr').onclick=()=>power(true);
+$('ld').onclick=()=>{boot($('src').value);ui()};$('rs').onclick=()=>{$('src').value=DEF;boot(null);ui()};
+function badge(t,c){return `<span class="bd ${c||''}">${t}</span>`}
+function ui(){if(!FWi)return;const v=FWi.vars();$('clk').textContent=`Sim time ${fmt(simMs)} | depth ${depth.toFixed(1)} m | dive ${fmt(v.dur*1000)}`;$('buz').className=performance.now()<buzz?'on':'';
+ $('badges').innerHTML=[v.fault&&badge('SENSOR FAULT','w'),v.wc&&badge('CEILING BREACH','w'),v.wp&&badge('HIGH PPO2','w'),v.wa&&badge('ASCENT FAST','w'),v.texc&&badge('TABLE EXCEEDED','w'),v.deco&&badge('DECO','i'),v.ss&&badge('SAFETY STOP','i'),v.ds&&badge('DEEP STOP','i'),v.lock>0&&badge('ALGO LOCKED'),v.nofly>0&&badge('NO FLY')].filter(Boolean).join('')||badge('no active alerts');
+ $('alog').textContent=alog.join('\n')||'-';$('live').innerHTML=badge('mode '+v.mode)+badge('NDL '+v.ndl)+badge('ceil '+v.ceil)+badge('TTS '+v.tts)}
+function dbgDraw(){if($('dbgp').hidden)return;const v=FWi.vars();
+ $('dv').innerHTML=Object.entries(v).filter(([k,x])=>typeof x!='object').map(([k,x])=>`<div><b>${k}</b> ${typeof x=='number'?(+x.toFixed(4)):x}</div>`).join('');
+ tc.clearRect(0,0,620,200);tc.font='10px monospace';const gh=v.gf1||.7;
+ v.P.forEach((p,i)=>{const y=i*12+2;tc.fillStyle='#8884';tc.fillRect(30,y,540,9);tc.fillStyle=p>=1.013+gh*((FWi.A?FWi.A[i]+1.013/FWi.B[i]:2)-1.013)?'#d92d20':'#3b82f6';tc.fillRect(30,y,p/4*540,9);
+  tc.fillStyle='#fff';tc.fillRect(30+v.pabs/4*540,y-1,2,11);if(FWi.A){tc.fillStyle='#f79009';tc.fillRect(30+(1.013+gh*(FWi.A[i]+1.013/FWi.B[i]-1.013))/4*540,y-1,2,11)}
+  tc.fillStyle='#888';tc.fillText('C'+(i+1),0,y+8);tc.fillText(p.toFixed(3),574,y+8)});
+ $('hal').textContent=`analogMv=${lastMv.toFixed(1)}  ticks=${ticks}  buttons pending=${pend}  flash keys=${[...flash.keys()]}\n`+ser.join('\n')}
+boot(null);ui();
+let dc=0;setInterval(()=>{if(!speed)return;try{for(let i=0;i<speed;i++){skipR=i<speed-1;step()}skipR=false}catch(e){$('err').textContent='Runtime error: '+e;speed=0}ui();if(++dc%3==0)dbgDraw()},100);
+</script></body></html>
