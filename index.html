@@ -1,517 +1,517 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ESP32 Dive Computer Web Simulator</title>
-  <style>
-    :root {
-      --bg-color: #0d1117;
-      --card-bg: #161b22;
-      --border-color: #30363d;
-      --accent-color: #58a6ff;
-      --text-color: #c9d1d9;
-      --oled-bg: #000000;
-      --oled-blue: #00d2ff;
-      --oled-yellow: #ffcc00;
-      --oled-alert: #ff4444;
-    }
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Dive Computer Web Simulator</title>
+    <style>
+        :root {
+        --bg-color: #0d1117;
+        --card-bg: #161b22;
+        --border-color: #30363d;
+        --accent-color: #58a6ff;
+        --text-color: #c9d1d9;
+        --oled-bg: #000000;
+        --oled-blue: #00d2ff;
+        --oled-yellow: #ffcc00;
+        --oled-alert: #ff4444;
+        }
 
-    body {
-      margin: 0;
-      padding: 20px;
-      background-color: var(--bg-color);
-      color: var(--text-color);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
+        body {
+        margin: 0;
+        padding: 20px;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        }
 
-    h1, h2, h3 { margin: 0 0 10px 0; color: #fff; }
+        h1, h2, h3 { margin: 0 0 10px 0; color: #fff; }
 
-    .grid-container {
-      display: grid;
-      grid-template-columns: 320px 1fr 340px;
-      gap: 20px;
-    }
+        .grid-container {
+        display: grid;
+        grid-template-columns: 320px 1fr 340px;
+        gap: 20px;
+        }
 
-    .card {
-      background: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 15px;
-    }
+        .card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 15px;
+        }
 
-    /* Device UI & OLED Display */
-    .device-housing {
-      background: #21262d;
-      border: 3px solid #484f58;
-      border-radius: 20px;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-    }
+        /* Device UI & OLED Display */
+        .device-housing {
+        background: #21262d;
+        border: 3px solid #484f58;
+        border-radius: 20px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
 
-    .oled-screen {
-      width: 256px; /* 128x64 double size */
-      height: 128px;
-      background-color: var(--oled-bg);
-      border: 2px solid #30363d;
-      border-radius: 4px;
-      padding: 8px;
-      box-sizing: border-box;
-      font-family: 'Courier New', Courier, monospace;
-      color: var(--oled-blue);
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      user-select: none;
-      position: relative;
-    }
+        .oled-screen {
+        width: 256px; /* 128x64 double size */
+        height: 128px;
+        background-color: var(--oled-bg);
+        border: 2px solid #30363d;
+        border-radius: 4px;
+        padding: 8px;
+        box-sizing: border-box;
+        font-family: 'Courier New', Courier, monospace;
+        color: var(--oled-blue);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        user-select: none;
+        position: relative;
+        }
 
-    .oled-screen.alarm {
-      border-color: var(--oled-alert);
-      animation: flash 0.5s infinite alternate;
-    }
+        .oled-screen.alarm {
+        border-color: var(--oled-alert);
+        animation: flash 0.5s infinite alternate;
+        }
 
-    @keyframes flash {
-      from { box-shadow: 0 0 5px var(--oled-alert); }
-      to { box-shadow: 0 0 20px var(--oled-alert); }
-    }
+        @keyframes flash {
+        from { box-shadow: 0 0 5px var(--oled-alert); }
+        to { box-shadow: 0 0 20px var(--oled-alert); }
+        }
 
-    .oled-header {
-      display: flex;
-      justify-content: space-between;
-      font-size: 12px;
-      color: var(--oled-yellow);
-      border-bottom: 1px solid #333;
-      padding-bottom: 2px;
-    }
+        .oled-header {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: var(--oled-yellow);
+        border-bottom: 1px solid #333;
+        padding-bottom: 2px;
+        }
 
-    .oled-main {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 5px;
-      margin: 5px 0;
-    }
+        .oled-main {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 5px;
+        margin: 5px 0;
+        }
 
-    .oled-value {
-      font-size: 20px;
-      font-weight: bold;
-    }
+        .oled-value {
+        font-size: 20px;
+        font-weight: bold;
+        }
 
-    .oled-label {
-      font-size: 10px;
-      color: #888;
-    }
+        .oled-label {
+        font-size: 10px;
+        color: #888;
+        }
 
-    .oled-footer {
-      font-size: 11px;
-      color: var(--oled-yellow);
-      border-top: 1px solid #333;
-      padding-top: 2px;
-      display: flex;
-      justify-content: space-between;
-    }
+        .oled-footer {
+        font-size: 11px;
+        color: var(--oled-yellow);
+        border-top: 1px solid #333;
+        padding-top: 2px;
+        display: flex;
+        justify-content: space-between;
+        }
 
-    /* Physical Buttons */
-    .hardware-buttons {
-      display: flex;
-      justify-content: space-between;
-      width: 100%;
-      margin-top: 20px;
-    }
+        /* Physical Buttons */
+        .hardware-buttons {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+        margin-top: 20px;
+        }
 
-    .btn-hw {
-      background: #30363d;
-      color: white;
-      border: 2px solid #6e7681;
-      border-radius: 50%;
-      width: 50px;
-      height: 50px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: active 0.1s;
-    }
+        .btn-hw {
+        background: #30363d;
+        color: white;
+        border: 2px solid #6e7681;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: active 0.1s;
+        }
 
-    .btn-hw:active {
-      background: var(--accent-color);
-      transform: scale(0.95);
-    }
+        .btn-hw:active {
+        background: var(--accent-color);
+        transform: scale(0.95);
+        }
 
-    /* Sliders & Controls */
-    .control-group {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin-bottom: 15px;
-    }
+        /* Sliders & Controls */
+        .control-group {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-bottom: 15px;
+        }
 
-    label { font-size: 12px; font-weight: bold; }
-    input[type=range] { width: 100%; }
-    button.btn-action {
-      background: #238636;
-      color: white;
-      border: none;
-      padding: 8px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: bold;
-    }
+        label { font-size: 12px; font-weight: bold; }
+        input[type=range] { width: 100%; }
+        button.btn-action {
+        background: #238636;
+        color: white;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: bold;
+        }
 
-    /* Code & Debug Logs */
-    pre, code {
-      font-family: 'Fira Code', 'Courier New', monospace;
-      font-size: 11px;
-    }
+        /* Code & Debug Logs */
+        pre, code {
+        font-family: 'Fira Code', 'Courier New', monospace;
+        font-size: 11px;
+        }
 
-    .code-editor {
-      width: 100%;
-      height: 240px;
-      background: #0d1117;
-      color: #79c0ff;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      padding: 10px;
-      box-sizing: border-box;
-      resize: vertical;
-    }
+        .code-editor {
+        width: 100%;
+        height: 240px;
+        background: #0d1117;
+        color: #79c0ff;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 10px;
+        box-sizing: border-box;
+        resize: vertical;
+        }
 
-    .debug-log {
-      height: 220px;
-      background: #000;
-      color: #3fb950;
-      padding: 10px;
-      border-radius: 6px;
-      overflow-y: auto;
-      border: 1px solid var(--border-color);
-    }
+        .debug-log {
+        height: 220px;
+        background: #000;
+        color: #3fb950;
+        padding: 10px;
+        border-radius: 6px;
+        overflow-y: auto;
+        border: 1px solid var(--border-color);
+        }
 
-    .debug-item { margin-bottom: 4px; border-bottom: 1px dotted #222; }
-  </style>
-</head>
-<body>
+        .debug-item { margin-bottom: 4px; border-bottom: 1px dotted #222; }
+    </style>
+    </head>
+    <body>
 
-  <h1>🤿 Interactive Dive Computer Hardware & Code Simulator</h1>
+    <h1>🤿 Interactive Dive Computer Hardware & Code Simulator</h1>
 
-  <div class="grid-container">
+    <div class="grid-container">
 
-    <!-- COLUMN 1: Hardware Housing & Interactivity -->
-    <div class="card">
-      <h3>Hardware Frame</h3>
-      <div class="device-housing">
-        <div id="oledScreen" class="oled-screen">
-          <div class="oled-header">
-            <span id="screenMode">SURFACE</span>
-            <span id="screenAlgo">Buhlmann</span>
-          </div>
-          <div class="oled-main">
-            <div>
-              <div class="oled-label">DEPTH (m)</div>
-              <div id="dispDepth" class="oled-value">0.0</div>
+        <!-- COLUMN 1: Hardware Housing & Interactivity -->
+        <div class="card">
+        <h3>Hardware Frame</h3>
+        <div class="device-housing">
+            <div id="oledScreen" class="oled-screen">
+            <div class="oled-header">
+                <span id="screenMode">SURFACE</span>
+                <span id="screenAlgo">Buhlmann</span>
             </div>
-            <div>
-              <div class="oled-label">NDL (min)</div>
-              <div id="dispNDL" class="oled-value">99</div>
+            <div class="oled-main">
+                <div>
+                <div class="oled-label">DEPTH (m)</div>
+                <div id="dispDepth" class="oled-value">0.0</div>
+                </div>
+                <div>
+                <div class="oled-label">NDL (min)</div>
+                <div id="dispNDL" class="oled-value">99</div>
+                </div>
+                <div>
+                <div class="oled-label">DIVE TIME</div>
+                <div id="dispTime" class="oled-value">00:00</div>
+                </div>
+                <div>
+                <div class="oled-label">TEMP (°C)</div>
+                <div id="dispTemp" class="oled-value">26.0</div>
+                </div>
             </div>
-            <div>
-              <div class="oled-label">DIVE TIME</div>
-              <div id="dispTime" class="oled-value">00:00</div>
+            <div class="oled-footer">
+                <span id="dispStop">NO DECO</span>
+                <span id="dispTTS">TTS: 0m</span>
             </div>
-            <div>
-              <div class="oled-label">TEMP (°C)</div>
-              <div id="dispTemp" class="oled-value">26.0</div>
             </div>
-          </div>
-          <div class="oled-footer">
-            <span id="dispStop">NO DECO</span>
-            <span id="dispTTS">TTS: 0m</span>
-          </div>
+
+            <!-- Physical Pushbuttons -->
+            <div class="hardware-buttons">
+            <button class="btn-hw" onclick="pressButton('SELECT')">SEL</button>
+            <button class="btn-hw" onclick="pressButton('UP')">▲</button>
+            <button class="btn-hw" onclick="pressButton('DOWN')">▼</button>
+            </div>
         </div>
 
-        <!-- Physical Pushbuttons -->
-        <div class="hardware-buttons">
-          <button class="btn-hw" onclick="pressButton('SELECT')">SEL</button>
-          <button class="btn-hw" onclick="pressButton('UP')">▲</button>
-          <button class="btn-hw" onclick="pressButton('DOWN')">▼</button>
+        <!-- Audio Buzzer Test -->
+        <div style="margin-top: 15px;">
+            <label>🔊 Audio Alert Test (Buzzer)</label>
+            <button class="btn-action" style="background:#d29922; width:100%;" onclick="playBuzzer(1000, 200)">Trigger Alert Tone</button>
         </div>
-      </div>
-
-      <!-- Audio Buzzer Test -->
-      <div style="margin-top: 15px;">
-        <label>🔊 Audio Alert Test (Buzzer)</label>
-        <button class="btn-action" style="background:#d29922; width:100%;" onclick="playBuzzer(1000, 200)">Trigger Alert Tone</button>
-      </div>
-    </div>
-
-    <!-- COLUMN 2: Environmental Controls & Time Simulation -->
-    <div class="card">
-      <h3>Environment & Speed Controls</h3>
-      
-      <!-- Time Playback Controls -->
-      <div class="control-group" style="background: #21262d; padding: 10px; border-radius: 6px;">
-        <label>Playback Time Speed Multiplier:</label>
-        <div style="display: flex; gap: 10px;">
-          <button class="btn-action" onclick="setSpeed(1)">1x (Real Time)</button>
-          <button class="btn-action" onclick="setSpeed(10)">10x Fast</button>
-          <button class="btn-action" onclick="setSpeed(60)">60x (1s = 1min)</button>
-          <button class="btn-action" style="background:#f85149;" onclick="resetDive()">Reset Dive</button>
         </div>
-      </div>
 
-      <div class="control-group">
-        <label>Current Depth: <span id="valDepth">0.0</span> m</label>
-        <input type="range" id="sliderDepth" min="0" max="60" step="0.5" value="0" oninput="updateDepth(this.value)">
-      </div>
-
-      <div class="control-group">
-        <label>Water Temperature: <span id="valTemp">26</span> °C</label>
-        <input type="range" id="sliderTemp" min="4" max="35" step="1" value="26" oninput="updateTemp(this.value)">
-      </div>
-
-      <div class="control-group">
-        <label>Surface State Toggle:</label>
-        <button class="btn-action" id="btnSurface" onclick="toggleSurface()">Force Dive / Surface Switch</button>
-      </div>
-
-      <!-- Scripting Code Area -->
-      <h3>Firmware Algorithm Engine Hook</h3>
-      <textarea id="codeEditor" class="code-editor">// Bühlmann ZHL-16C execution logic run per tick
-function executeAlgorithmTick(depthMeters, elapsedTimeSec, dt) {
-    const pAmb = 1.013 + (depthMeters / 10.0);
-    const fN2 = 0.79; // Air default (21% O2)
-    
-    // Update tissue compartment saturation via Schreiner / Haldane equation
-    updateTissues(pAmb, fN2, dt);
-    
-    // Compute exact NDL or Deco obligation
-    const gfHi = 0.70;
-    const gfLo = 0.30;
-    const ndl = Math.floor(calcNDL(pAmb, fN2, gfHi));
-    const ceiling = calcCeiling(gfLo, gfHi);
-    
-    const inDeco = ceiling > 0;
-    const isAlarm = (depthMeters > 40) || (inDeco && depthMeters < ceiling);
-    
-    return {
-        pN2: P_N2[0],
-        ndl: inDeco ? 0 : ndl,
-        ceiling: ceiling,
-        inDeco: inDeco,
-        alarm: isAlarm
-    };
-}
-      </textarea>
-    </div>
-
-    <!-- COLUMN 3: Debugger & Computations -->
-    <div class="card">
-      <h3>Algorithm Computations Debugger</h3>
-      <div id="debugLog" class="debug-log">
-        <div class="debug-item">System booted. Bühlmann ZHL-16C engine initialized...</div>
-      </div>
-    </div>
-
-  </div>
-
-  <script>
-    // --- Bühlmann ZHL-16C Engine Constants ---
-    const NUM_COMPARTMENTS = 16;
-    const P_SURF = 1.013;
-    const PH2O = 0.0627;
-    const HALF_TIME_N2 = [5.0, 8.0, 12.5, 18.5, 27.0, 38.3, 54.3, 77.0, 109.0, 146.0, 187.0, 239.0, 305.0, 390.0, 498.0, 635.0];
-    const A_N2 = [1.1696, 1.0000, 0.8618, 0.7562, 0.6200, 0.5043, 0.4410, 0.4000, 0.3750, 0.3500, 0.3295, 0.3065, 0.2835, 0.2610, 0.2480, 0.2327];
-    const B_N2 = [0.5578, 0.6514, 0.7222, 0.7825, 0.8126, 0.8434, 0.8693, 0.8910, 0.9092, 0.9222, 0.9319, 0.9403, 0.9477, 0.9544, 0.9602, 0.9653];
-
-    let K_N2 = new Array(16);
-    let P_N2 = new Array(16);
-    let P_AIR = new Array(16);
-
-    // Initialize tissue math tables
-    function initBuhlmann() {
-      for (let i = 0; i < NUM_COMPARTMENTS; i++) {
-        K_N2[i] = Math.log(2.0) / (HALF_TIME_N2[i] * 60.0);
-        P_AIR[i] = (P_SURF - PH2O) * 0.7902;
-        P_N2[i] = P_AIR[i];
-      }
-    }
-    initBuhlmann();
-
-    function updateTissues(pAmb, fN2, secs) {
-      const pN2Insp = (pAmb - PH2O) * fN2;
-      for (let i = 0; i < NUM_COMPARTMENTS; i++) {
-        P_N2[i] = pN2Insp + (P_N2[i] - pN2Insp) * Math.exp(-K_N2[i] * secs);
-      }
-    }
-
-    function calcNDL(pAmb, fN2, gfHi) {
-      const pN2Insp = (pAmb - PH2O) * fN2;
-      let minNDL = 9999 * 60;
-      for (let i = 0; i < NUM_COMPARTMENTS; i++) {
-        const m0 = A_N2[i] + P_SURF / B_N2[i];
-        const M = P_SURF + gfHi * (m0 - P_SURF);
-        if (P_N2[i] >= M) return 0;
-        if (pN2Insp <= M) continue;
-        const t = Math.log((pN2Insp - P_N2[i]) / (pN2Insp - M)) / K_N2[i];
-        if (t < minNDL) minNDL = t;
-      }
-      return minNDL / 60.0;
-    }
-
-    function calcCeiling(gfLo, gfHi) {
-      let maxP = 0;
-      for (let i = 0; i < NUM_COMPARTMENTS; i++) {
-        let pTol = (P_N2[i] - A_N2[i] * gfLo) / (gfLo / B_N2[i] - gfLo + 1.0);
-        if (pTol > maxP) maxP = pTol;
-      }
-      if (maxP <= P_SURF) return 0;
-      let ceilM = (maxP - P_SURF) * 10.0;
-      return Math.ceil(ceilM / 3.0) * 3.0; // 3m stop intervals
-    }
-
-    // --- State Variables ---
-    let depth = 0.0;
-    let temperature = 26.0;
-    let elapsedTime = 0;
-    let speed = 1;
-    let isDiveMode = false;
-    let audioCtx = null;
-    let currentAlgoIdx = 0;
-    const algoNames = ["Buhlmann", "RGBM-sim", "PADI-tbl"];
-
-    // --- Audio Buzzer Implementation ---
-    function playBuzzer(freq = 2000, durationMs = 150) {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-      }
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + (durationMs / 1000));
-    }
-
-    // --- Hardware UI Interactions ---
-    function pressButton(btnName) {
-      playBuzzer(2500, 50);
-      logDebug(`[HW BTN] Pressed: ${btnName}`);
-      if(btnName === 'SELECT') {
-        currentAlgoIdx = (currentAlgoIdx + 1) % algoNames.length;
-        document.getElementById('screenAlgo').innerText = algoNames[currentAlgoIdx];
-      }
-    }
-
-    function updateDepth(val) {
-      depth = parseFloat(val);
-      document.getElementById('valDepth').innerText = depth.toFixed(1);
-      
-      if (depth > 0.8 && !isDiveMode) {
-        isDiveMode = true;
-        document.getElementById('screenMode').innerText = "DIVE";
-        logDebug("--> DIVE STARTED (Auto-detected depth > 0.8m)");
-        playBuzzer(1500, 300);
-      } else if (depth <= 0.3 && isDiveMode) {
-        isDiveMode = false;
-        document.getElementById('screenMode').innerText = "SURFACE";
-        logDebug("--> END OF DIVE / ON SURFACE");
-      }
-    }
-
-    function updateTemp(val) {
-      temperature = parseFloat(val);
-      document.getElementById('valTemp').innerText = temperature.toFixed(1);
-    }
-
-    function toggleSurface() {
-      isDiveMode = !isDiveMode;
-      document.getElementById('screenMode').innerText = isDiveMode ? "DIVE" : "SURFACE";
-      logDebug(`Manual mode toggled: ${isDiveMode ? "DIVE" : "SURFACE"}`);
-    }
-
-    function setSpeed(s) {
-      speed = s;
-      logDebug(`Playback speed adjusted to: ${speed}x`);
-    }
-
-    function resetDive() {
-      elapsedTime = 0;
-      depth = 0;
-      initBuhlmann();
-      document.getElementById('sliderDepth').value = 0;
-      updateDepth(0);
-      document.getElementById('debugLog').innerHTML = '';
-      logDebug("Dive computer reset & tissue compartments re-initialized.");
-    }
-
-    function logDebug(msg) {
-      const log = document.getElementById('debugLog');
-      const item = document.createElement('div');
-      item.className = 'debug-item';
-      item.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      log.appendChild(item);
-      log.scrollTop = log.scrollHeight;
-    }
-
-    // --- Main Simulator Loop ---
-    function tick() {
-      const stepSec = 1 * speed;
-      if (isDiveMode) {
-        elapsedTime += stepSec;
-      }
-
-      document.getElementById('dispDepth').innerText = depth.toFixed(1);
-      document.getElementById('dispTemp').innerText = temperature.toFixed(1);
-      
-      let mins = Math.floor(elapsedTime / 60).toString().padStart(2, '0');
-      let secs = (elapsedTime % 60).toString().padStart(2, '0');
-      document.getElementById('dispTime').innerText = `${mins}:${secs}`;
-
-      try {
-        const userCode = document.getElementById('codeEditor').value;
-        const evalFunc = new Function(`
-          ${userCode}; 
-          return executeAlgorithmTick(${depth}, ${elapsedTime}, ${stepSec});
-        `);
-        const result = evalFunc();
-
-        // Update displays based on engine computations
-        document.getElementById('dispNDL').innerText = result.ndl > 99 ? '99+' : result.ndl;
+        <!-- COLUMN 2: Environmental Controls & Time Simulation -->
+        <div class="card">
+        <h3>Environment & Speed Controls</h3>
         
-        const stopElem = document.getElementById('dispStop');
-        if (result.inDeco) {
-          stopElem.innerText = `STOP ${result.ceiling}m`;
-        } else {
-          stopElem.innerText = "NO DECO";
-        }
+        <!-- Time Playback Controls -->
+        <div class="control-group" style="background: #21262d; padding: 10px; border-radius: 6px;">
+            <label>Playback Time Speed Multiplier:</label>
+            <div style="display: flex; gap: 10px;">
+            <button class="btn-action" onclick="setSpeed(1)">1x (Real Time)</button>
+            <button class="btn-action" onclick="setSpeed(10)">10x Fast</button>
+            <button class="btn-action" onclick="setSpeed(60)">60x (1s = 1min)</button>
+            <button class="btn-action" style="background:#f85149;" onclick="resetDive()">Reset Dive</button>
+            </div>
+        </div>
 
-        const screen = document.getElementById('oledScreen');
-        if (result.alarm) {
-          screen.classList.add('alarm');
-          if (elapsedTime % 2 === 0) playBuzzer(3000, 100);
-        } else {
-          screen.classList.remove('alarm');
-        }
+        <div class="control-group">
+            <label>Current Depth: <span id="valDepth">0.0</span> m</label>
+            <input type="range" id="sliderDepth" min="0" max="60" step="0.5" value="0" oninput="updateDepth(this.value)">
+        </div>
 
-        if (elapsedTime % 5 === 0 && isDiveMode) {
-          logDebug(`CALC: P_amb=${(1.013 + depth/10).toFixed(2)}bar | FastTissue_N2=${result.pN2.toFixed(3)}bar | NDL=${result.ndl}m`);
-        }
+        <div class="control-group">
+            <label>Water Temperature: <span id="valTemp">26</span> °C</label>
+            <input type="range" id="sliderTemp" min="4" max="35" step="1" value="26" oninput="updateTemp(this.value)">
+        </div>
 
-      } catch (err) {
-        logDebug(`[CODE ERROR] ${err.message}`);
-      }
+        <div class="control-group">
+            <label>Surface State Toggle:</label>
+            <button class="btn-action" id="btnSurface" onclick="toggleSurface()">Force Dive / Surface Switch</button>
+        </div>
+
+        <!-- Scripting Code Area -->
+        <h3>Firmware Algorithm Engine Hook</h3>
+        <textarea id="codeEditor" class="code-editor">// Bühlmann ZHL-16C execution logic run per tick
+    function executeAlgorithmTick(depthMeters, elapsedTimeSec, dt) {
+        const pAmb = 1.013 + (depthMeters / 10.0);
+        const fN2 = 0.79; // Air default (21% O2)
+        
+        // Update tissue compartment saturation via Schreiner / Haldane equation
+        updateTissues(pAmb, fN2, dt);
+        
+        // Compute exact NDL or Deco obligation
+        const gfHi = 0.70;
+        const gfLo = 0.30;
+        const ndl = Math.floor(calcNDL(pAmb, fN2, gfHi));
+        const ceiling = calcCeiling(gfLo, gfHi);
+        
+        const inDeco = ceiling > 0;
+        const isAlarm = (depthMeters > 40) || (inDeco && depthMeters < ceiling);
+        
+        return {
+            pN2: P_N2[0],
+            ndl: inDeco ? 0 : ndl,
+            ceiling: ceiling,
+            inDeco: inDeco,
+            alarm: isAlarm
+        };
     }
+        </textarea>
+        </div>
 
-    setInterval(tick, 1000);
-  </script>
-</body>
-</html>
+        <!-- COLUMN 3: Debugger & Computations -->
+        <div class="card">
+        <h3>Algorithm Computations Debugger</h3>
+        <div id="debugLog" class="debug-log">
+            <div class="debug-item">System booted. Bühlmann ZHL-16C engine initialized...</div>
+        </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Bühlmann ZHL-16C Engine Constants ---
+        const NUM_COMPARTMENTS = 16;
+        const P_SURF = 1.013;
+        const PH2O = 0.0627;
+        const HALF_TIME_N2 = [5.0, 8.0, 12.5, 18.5, 27.0, 38.3, 54.3, 77.0, 109.0, 146.0, 187.0, 239.0, 305.0, 390.0, 498.0, 635.0];
+        const A_N2 = [1.1696, 1.0000, 0.8618, 0.7562, 0.6200, 0.5043, 0.4410, 0.4000, 0.3750, 0.3500, 0.3295, 0.3065, 0.2835, 0.2610, 0.2480, 0.2327];
+        const B_N2 = [0.5578, 0.6514, 0.7222, 0.7825, 0.8126, 0.8434, 0.8693, 0.8910, 0.9092, 0.9222, 0.9319, 0.9403, 0.9477, 0.9544, 0.9602, 0.9653];
+
+        let K_N2 = new Array(16);
+        let P_N2 = new Array(16);
+        let P_AIR = new Array(16);
+
+        // Initialize tissue math tables
+        function initBuhlmann() {
+        for (let i = 0; i < NUM_COMPARTMENTS; i++) {
+            K_N2[i] = Math.log(2.0) / (HALF_TIME_N2[i] * 60.0);
+            P_AIR[i] = (P_SURF - PH2O) * 0.7902;
+            P_N2[i] = P_AIR[i];
+        }
+        }
+        initBuhlmann();
+
+        function updateTissues(pAmb, fN2, secs) {
+        const pN2Insp = (pAmb - PH2O) * fN2;
+        for (let i = 0; i < NUM_COMPARTMENTS; i++) {
+            P_N2[i] = pN2Insp + (P_N2[i] - pN2Insp) * Math.exp(-K_N2[i] * secs);
+        }
+        }
+
+        function calcNDL(pAmb, fN2, gfHi) {
+        const pN2Insp = (pAmb - PH2O) * fN2;
+        let minNDL = 9999 * 60;
+        for (let i = 0; i < NUM_COMPARTMENTS; i++) {
+            const m0 = A_N2[i] + P_SURF / B_N2[i];
+            const M = P_SURF + gfHi * (m0 - P_SURF);
+            if (P_N2[i] >= M) return 0;
+            if (pN2Insp <= M) continue;
+            const t = Math.log((pN2Insp - P_N2[i]) / (pN2Insp - M)) / K_N2[i];
+            if (t < minNDL) minNDL = t;
+        }
+        return minNDL / 60.0;
+        }
+
+        function calcCeiling(gfLo, gfHi) {
+        let maxP = 0;
+        for (let i = 0; i < NUM_COMPARTMENTS; i++) {
+            let pTol = (P_N2[i] - A_N2[i] * gfLo) / (gfLo / B_N2[i] - gfLo + 1.0);
+            if (pTol > maxP) maxP = pTol;
+        }
+        if (maxP <= P_SURF) return 0;
+        let ceilM = (maxP - P_SURF) * 10.0;
+        return Math.ceil(ceilM / 3.0) * 3.0; // 3m stop intervals
+        }
+
+        // --- State Variables ---
+        let depth = 0.0;
+        let temperature = 26.0;
+        let elapsedTime = 0;
+        let speed = 1;
+        let isDiveMode = false;
+        let audioCtx = null;
+        let currentAlgoIdx = 0;
+        const algoNames = ["Buhlmann", "RGBM-sim", "PADI-tbl"];
+
+        // --- Audio Buzzer Implementation ---
+        function playBuzzer(freq = 2000, durationMs = 150) {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + (durationMs / 1000));
+        }
+
+        // --- Hardware UI Interactions ---
+        function pressButton(btnName) {
+        playBuzzer(2500, 50);
+        logDebug(`[HW BTN] Pressed: ${btnName}`);
+        if(btnName === 'SELECT') {
+            currentAlgoIdx = (currentAlgoIdx + 1) % algoNames.length;
+            document.getElementById('screenAlgo').innerText = algoNames[currentAlgoIdx];
+        }
+        }
+
+        function updateDepth(val) {
+        depth = parseFloat(val);
+        document.getElementById('valDepth').innerText = depth.toFixed(1);
+        
+        if (depth > 0.8 && !isDiveMode) {
+            isDiveMode = true;
+            document.getElementById('screenMode').innerText = "DIVE";
+            logDebug("--> DIVE STARTED (Auto-detected depth > 0.8m)");
+            playBuzzer(1500, 300);
+        } else if (depth <= 0.3 && isDiveMode) {
+            isDiveMode = false;
+            document.getElementById('screenMode').innerText = "SURFACE";
+            logDebug("--> END OF DIVE / ON SURFACE");
+        }
+        }
+
+        function updateTemp(val) {
+        temperature = parseFloat(val);
+        document.getElementById('valTemp').innerText = temperature.toFixed(1);
+        }
+
+        function toggleSurface() {
+        isDiveMode = !isDiveMode;
+        document.getElementById('screenMode').innerText = isDiveMode ? "DIVE" : "SURFACE";
+        logDebug(`Manual mode toggled: ${isDiveMode ? "DIVE" : "SURFACE"}`);
+        }
+
+        function setSpeed(s) {
+        speed = s;
+        logDebug(`Playback speed adjusted to: ${speed}x`);
+        }
+
+        function resetDive() {
+        elapsedTime = 0;
+        depth = 0;
+        initBuhlmann();
+        document.getElementById('sliderDepth').value = 0;
+        updateDepth(0);
+        document.getElementById('debugLog').innerHTML = '';
+        logDebug("Dive computer reset & tissue compartments re-initialized.");
+        }
+
+        function logDebug(msg) {
+        const log = document.getElementById('debugLog');
+        const item = document.createElement('div');
+        item.className = 'debug-item';
+        item.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        log.appendChild(item);
+        log.scrollTop = log.scrollHeight;
+        }
+
+        // --- Main Simulator Loop ---
+        function tick() {
+        const stepSec = 1 * speed;
+        if (isDiveMode) {
+            elapsedTime += stepSec;
+        }
+
+        document.getElementById('dispDepth').innerText = depth.toFixed(1);
+        document.getElementById('dispTemp').innerText = temperature.toFixed(1);
+        
+        let mins = Math.floor(elapsedTime / 60).toString().padStart(2, '0');
+        let secs = (elapsedTime % 60).toString().padStart(2, '0');
+        document.getElementById('dispTime').innerText = `${mins}:${secs}`;
+
+        try {
+            const userCode = document.getElementById('codeEditor').value;
+            const evalFunc = new Function(`
+            ${userCode}; 
+            return executeAlgorithmTick(${depth}, ${elapsedTime}, ${stepSec});
+            `);
+            const result = evalFunc();
+
+            // Update displays based on engine computations
+            document.getElementById('dispNDL').innerText = result.ndl > 99 ? '99+' : result.ndl;
+            
+            const stopElem = document.getElementById('dispStop');
+            if (result.inDeco) {
+            stopElem.innerText = `STOP ${result.ceiling}m`;
+            } else {
+            stopElem.innerText = "NO DECO";
+            }
+
+            const screen = document.getElementById('oledScreen');
+            if (result.alarm) {
+            screen.classList.add('alarm');
+            if (elapsedTime % 2 === 0) playBuzzer(3000, 100);
+            } else {
+            screen.classList.remove('alarm');
+            }
+
+            if (elapsedTime % 5 === 0 && isDiveMode) {
+            logDebug(`CALC: P_amb=${(1.013 + depth/10).toFixed(2)}bar | FastTissue_N2=${result.pN2.toFixed(3)}bar | NDL=${result.ndl}m`);
+            }
+
+        } catch (err) {
+            logDebug(`[CODE ERROR] ${err.message}`);
+        }
+        }
+
+        setInterval(tick, 1000);
+    </script>
+    </body>
+    </html>
